@@ -70,7 +70,7 @@ function Navbar({ darkMode, setDarkMode }: NavbarProps) {
               group-hover:scale-105
             "
           >
-            <span className="relative z-10">MA</span>
+            <span className="relative z-10">BS</span>
 
             <span
               className="
