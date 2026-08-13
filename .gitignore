@@ -42,3 +42,8 @@ temp/
 
 # Docker
 *.pid
+
+# Local data
+/databases/*/data/
+**/postgres-data/
+**/.DS_Store

@@ -1,8 +1,8 @@
 packages:
-  - "apps/*"
-  - "services/*"
-  - "packages/*"
+  - "frontend/*"
+  - "backend/gateway"
+  - "backend/services/*"
 allowBuilds:
-  '@prisma/engines': true
+  "@prisma/engines": true
   prisma: true
   unrs-resolver: false

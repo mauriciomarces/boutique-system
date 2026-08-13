@@ -1,0 +1,4 @@
+auto-install-peers=true
+hoist=true
+strict-peer-dependencies=false
+allow-scripts=@prisma/engines,prisma,unrs-resolver

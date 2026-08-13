@@ -1,59 +1,324 @@
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: boutique_mysql
-
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: boutique-nginx
     restart: unless-stopped
-
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: boutique
-      MYSQL_USER: boutique
-      MYSQL_PASSWORD: boutique123
-
     ports:
-      - "3306:3306"
-
+      - "8080:80"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./database/init:/docker-entrypoint-initdb.d
-
+      - ./infrastructure/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - gateway
     networks:
       - boutique-network
 
+  frontend:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.frontend
+    container_name: boutique-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://gateway:3000
+    depends_on:
+      - gateway
+    networks:
+      - boutique-network
+
+  gateway:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.gateway
+    container_name: boutique-gateway
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      DATABASE_URL: mysql://boutique:secret@mysql-gateway:3306/boutique_gateway
+    depends_on:
+      mysql-gateway:
+        condition: service_healthy
+    networks:
+      - boutique-network
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: auth-service
+    container_name: boutique-auth-service
+    restart: unless-stopped
+    environment:
+      PORT: 4001
+      DATABASE_URL: mysql://boutique:secret@mysql-auth:3306/boutique_auth
+    depends_on:
+      mysql-auth:
+        condition: service_healthy
+    networks:
+      - boutique-network
+
+  users-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: users-service
+    container_name: boutique-users-service
+    restart: unless-stopped
+    environment:
+      PORT: 4002
+      DATABASE_URL: mysql://boutique:secret@mysql-users:3306/boutique_users
+    depends_on:
+      mysql-users:
+        condition: service_healthy
+    networks:
+      - boutique-network
+
+  products-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: products-service
+    container_name: boutique-products-service
+    restart: unless-stopped
+    environment:
+      PORT: 4003
+      DATABASE_URL: mysql://boutique:secret@mysql-products:3306/boutique_products
+    depends_on:
+      mysql-products:
+        condition: service_healthy
+    networks:
+      - boutique-network
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: inventory-service
+    container_name: boutique-inventory-service
+    restart: unless-stopped
+    environment:
+      PORT: 4004
+      DATABASE_URL: mysql://boutique:secret@mysql-inventory:3306/boutique_inventory
+    depends_on:
+      mysql-inventory:
+        condition: service_healthy
+    networks:
+      - boutique-network
+
+  sales-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: sales-service
+    container_name: boutique-sales-service
+    restart: unless-stopped
+    environment:
+      PORT: 4005
+      DATABASE_URL: mysql://boutique:secret@mysql-sales:3306/boutique_sales
+    depends_on:
+      mysql-sales:
+        condition: service_healthy
+    networks:
+      - boutique-network
+
+  notifications-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: notifications-service
+    container_name: boutique-notifications-service
+    restart: unless-stopped
+    environment:
+      PORT: 4006
+      DATABASE_URL: mysql://boutique:secret@mysql-notifications:3306/boutique_notifications
+    depends_on:
+      mysql-notifications:
+        condition: service_healthy
+    networks:
+      - boutique-network
+
+  mysql-gateway:
+    image: mysql:8
+    container_name: boutique-mysql-gateway
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: boutique_gateway
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - gateway-db-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
-      retries: 5
-
+      retries: 10
+    ports:
+      - "3306:3306"
+    networks:
+      - boutique-network
 
   phpmyadmin:
     image: phpmyadmin:latest
-
-    container_name: boutique_phpmyadmin
-
+    container_name: boutique-phpmyadmin
     restart: unless-stopped
-
-    ports:
-      - "8080:80"
-
-    environment:
-      PMA_HOST: mysql
-      PMA_PORT: 3306
-
     depends_on:
-      mysql:
-        condition: service_healthy
-
+      - mysql-gateway
+    environment:
+      PMA_HOST: mysql-gateway
+      PMA_PORT: 3306
+      PMA_USER: boutique
+      PMA_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "8081:80"
     networks:
       - boutique-network
 
+  mysql-auth:
+    image: mysql:8
+    container_name: boutique-mysql-auth
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: boutique_auth
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - auth-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3307:3306"
+    networks:
+      - boutique-network
+
+  mysql-users:
+    image: mysql:8
+    container_name: boutique-mysql-users
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: boutique_users
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - users-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3308:3306"
+    networks:
+      - boutique-network
+
+  mysql-products:
+    image: mysql:8
+    container_name: boutique-mysql-products
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: boutique_products
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - products-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3309:3306"
+    networks:
+      - boutique-network
+
+  mysql-inventory:
+    image: mysql:8
+    container_name: boutique-mysql-inventory
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: boutique_inventory
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - inventory-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3310:3306"
+    networks:
+      - boutique-network
+
+  mysql-sales:
+    image: mysql:8
+    container_name: boutique-mysql-sales
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: boutique_sales
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - sales-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3311:3306"
+    networks:
+      - boutique-network
+
+  mysql-notifications:
+    image: mysql:8
+    container_name: boutique-mysql-notifications
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: boutique_notifications
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - notifications-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3312:3306"
+    networks:
+      - boutique-network
 
 networks:
   boutique-network:
     driver: bridge
 
-
 volumes:
-  mysql_data:
+  gateway-db-data:
+  auth-db-data:
+  users-db-data:
+  products-db-data:
+  inventory-db-data:
+  sales-db-data:
+  notifications-db-data:

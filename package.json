@@ -1,23 +1,32 @@
 {
   "name": "boutique-system",
   "version": "1.0.0",
-  "description": "",
+  "description": "Boutique microservices platform",
   "private": true,
-  "main": "index.js",
   "scripts": {
-    "dev": "pnpm -r dev",
+    "dev": "docker compose up --build",
+    "dev:frontend": "cd frontend/web && pnpm install && pnpm dev -- --host 0.0.0.0",
+    "dev:gateway": "cd backend/gateway && pnpm install && pnpm start:dev",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down -v",
+    "docker:logs": "docker compose logs -f",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test"
   },
-  "keywords": [],
+  "keywords": [
+    "microservices",
+    "boutique",
+    "docker",
+    "nestjs",
+    "react"
+  ],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@11.21.0",
-  "type": "module",
-  "devDependencies": {
-    "nodemon": "^3.1.10",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.0"
-  }
+  "workspaces": [
+    "frontend/*",
+    "backend/gateway",
+    "backend/services/*"
+  ]
 }
