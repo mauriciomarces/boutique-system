@@ -20,7 +20,7 @@ services:
     container_name: boutique-frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://gateway:3000
+      VITE_API_URL: /api
     depends_on:
       - gateway
     networks:
@@ -37,34 +37,22 @@ services:
     environment:
       PORT: 3000
       NODE_ENV: development
-      DATABASE_URL: mysql://boutique:secret@mysql-gateway:3306/boutique_gateway
-
-      AUTH_SERVICE_URL: http://auth-service:4001
       USERS_SERVICE_URL: http://users-service:4002
       PRODUCTS_SERVICE_URL: http://products-service:4003
       INVENTORY_SERVICE_URL: http://inventory-service:4004
       SALES_SERVICE_URL: http://sales-service:4005
       NOTIFICATIONS_SERVICE_URL: http://notifications-service:4006
     depends_on:
-      mysql-gateway:
-        condition: service_healthy
-    networks:
-      - boutique-network
-
-  auth-service:
-    build:
-      context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.service
-      args:
-        SERVICE_NAME: auth-service
-    container_name: boutique-auth-service
-    restart: unless-stopped
-    environment:
-      PORT: 4001
-      DATABASE_URL: mysql://boutique:secret@mysql-auth:3306/boutique_auth
-    depends_on:
-      mysql-auth:
-        condition: service_healthy
+      users-service:
+        condition: service_started
+      products-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      sales-service:
+        condition: service_started
+      notifications-service:
+        condition: service_started
     networks:
       - boutique-network
 
@@ -150,65 +138,6 @@ services:
     depends_on:
       mysql-notifications:
         condition: service_healthy
-    networks:
-      - boutique-network
-
-  mysql-gateway:
-    image: mysql:8
-    container_name: boutique-mysql-gateway
-    restart: unless-stopped
-    environment:
-      MYSQL_USER: boutique
-      MYSQL_PASSWORD: secret
-      MYSQL_DATABASE: boutique_gateway
-      MYSQL_ROOT_PASSWORD: root
-    volumes:
-      - gateway-db-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    ports:
-      - "3306:3306"
-    networks:
-      - boutique-network
-
-  phpmyadmin:
-    image: phpmyadmin:latest
-    container_name: boutique-phpmyadmin
-    restart: unless-stopped
-    depends_on:
-      - mysql-gateway
-    environment:
-      PMA_HOST: mysql-gateway
-      PMA_PORT: 3306
-      PMA_USER: boutique
-      PMA_PASSWORD: secret
-      MYSQL_ROOT_PASSWORD: root
-    ports:
-      - "8081:80"
-    networks:
-      - boutique-network
-
-  mysql-auth:
-    image: mysql:8
-    container_name: boutique-mysql-auth
-    restart: unless-stopped
-    environment:
-      MYSQL_USER: boutique
-      MYSQL_PASSWORD: secret
-      MYSQL_DATABASE: boutique_auth
-      MYSQL_ROOT_PASSWORD: root
-    volumes:
-      - auth-db-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    ports:
-      - "3307:3306"
     networks:
       - boutique-network
 
@@ -317,15 +246,53 @@ services:
     networks:
       - boutique-network
 
+  mysql-ai:
+    image: mysql:8
+    container_name: boutique-mysql-ai
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: secret
+      MYSQL_DATABASE: boutique_ai
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - ai-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3313:3306"
+    networks:
+      - boutique-network
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: boutique-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql-users
+      PMA_PORT: 3306
+      PMA_USER: boutique
+      PMA_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: root
+    depends_on:
+      mysql-users:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+    networks:
+      - boutique-network
+
 networks:
   boutique-network:
     driver: bridge
 
 volumes:
-  gateway-db-data:
-  auth-db-data:
   users-db-data:
   products-db-data:
   inventory-db-data:
   sales-db-data:
   notifications-db-data:
+  ai-db-data:
