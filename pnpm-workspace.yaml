@@ -2,7 +2,9 @@ packages:
   - "frontend/*"
   - "backend/gateway"
   - "backend/services/*"
+
 allowBuilds:
+  "@parcel/watcher": true
   "@prisma/engines": true
-  prisma: true
-  unrs-resolver: false
+  "prisma": true
+  "unrs-resolver": false

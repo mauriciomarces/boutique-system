@@ -38,6 +38,13 @@ services:
       PORT: 3000
       NODE_ENV: development
       DATABASE_URL: mysql://boutique:secret@mysql-gateway:3306/boutique_gateway
+
+      AUTH_SERVICE_URL: http://auth-service:4001
+      USERS_SERVICE_URL: http://users-service:4002
+      PRODUCTS_SERVICE_URL: http://products-service:4003
+      INVENTORY_SERVICE_URL: http://inventory-service:4004
+      SALES_SERVICE_URL: http://sales-service:4005
+      NOTIFICATIONS_SERVICE_URL: http://notifications-service:4006
     depends_on:
       mysql-gateway:
         condition: service_healthy
