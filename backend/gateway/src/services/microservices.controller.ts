@@ -7,13 +7,6 @@ export class MicroservicesController {
     private readonly microservicesService: MicroservicesService,
   ) {}
 
-  @Get('auth/health')
-  getAuthHealth() {
-    return this.microservicesService.getServiceHealth(
-      process.env.AUTH_SERVICE_URL || 'http://auth-service:4001',
-    );
-  }
-
   @Get('users/health')
   getUsersHealth() {
     return this.microservicesService.getServiceHealth(
