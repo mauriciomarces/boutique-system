@@ -301,12 +301,6 @@ importers:
         specifier: ^8.20.0
         version: 8.66.0(eslint@9.39.5(jiti@2.7.0)(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
 
-  backend/services/auth-service:
-    dependencies:
-      express:
-        specifier: ^4.21.2
-        version: 4.22.2(supports-color@8.1.1)
-
   backend/services/inventory-service:
     dependencies:
       express:
