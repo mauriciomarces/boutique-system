@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model clientes {
+  id             BigInt   @id @default(autoincrement())
+  nombre         String   @db.VarChar(100)
+  apellido       String   @db.VarChar(100)
+  telefono       String?  @db.VarChar(30)
+  correo         String?  @db.VarChar(150)
+  estado         String   @default("ACTIVO") @db.VarChar(20)
+  creado_en      DateTime @db.DateTime(0)
+  actualizado_en DateTime @db.DateTime(0)
+  ventas         ventas[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model detalle_ventas {
+  id                   BigInt  @id @default(autoincrement())
+  venta_id             BigInt
+  variante_producto_id BigInt
+  cantidad             Int
+  precio_unitario      Decimal @db.Decimal(10, 2)
+  subtotal             Decimal @db.Decimal(12, 2)
+  ventas               ventas  @relation(fields: [venta_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "detalle_ventas_ibfk_1")
+
+  @@index([venta_id], map: "venta_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model pagos {
+  id             BigInt    @id @default(autoincrement())
+  venta_id       BigInt
+  metodo_pago    String    @db.VarChar(50)
+  monto          Decimal   @db.Decimal(12, 2)
+  estado         String    @default("PENDIENTE") @db.VarChar(30)
+  fecha_pago     DateTime? @db.DateTime(0)
+  creado_en      DateTime  @db.DateTime(0)
+  actualizado_en DateTime  @db.DateTime(0)
+  ventas         ventas    @relation(fields: [venta_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "pagos_ibfk_1")
+
+  @@index([venta_id], map: "venta_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ventas {
+  id             BigInt           @id @default(autoincrement())
+  cliente_id     BigInt?
+  fecha_venta    DateTime         @db.DateTime(0)
+  estado         String           @default("CONFIRMADA") @db.VarChar(30)
+  subtotal       Decimal          @db.Decimal(12, 2)
+  total          Decimal          @db.Decimal(12, 2)
+  creado_en      DateTime         @db.DateTime(0)
+  actualizado_en DateTime         @db.DateTime(0)
+  detalle_ventas detalle_ventas[]
+  pagos          pagos[]
+  clientes       clientes?        @relation(fields: [cliente_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "ventas_ibfk_1")
+
+  @@index([cliente_id], map: "cliente_id")
+}
