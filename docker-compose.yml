@@ -113,6 +113,8 @@ services:
     environment:
       PORT: 4005
       DATABASE_URL: mysql://boutique:secret@mysql-sales:3306/boutique_sales
+    ports:
+      - "4005:4005"
     depends_on:
       mysql-sales:
         condition: service_healthy
@@ -130,6 +132,8 @@ services:
     environment:
       PORT: 4006
       DATABASE_URL: mysql://boutique:secret@mysql-notifications:3306/boutique_notifications
+    ports:
+      - "4006:4006"
     depends_on:
       mysql-notifications:
         condition: service_healthy

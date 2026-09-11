@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model cargos {
+  id          BigInt      @id @default(autoincrement())
+  nombre      String      @unique(map: "nombre") @db.VarChar(100)
+  descripcion String?     @db.VarChar(255)
+  estado      String      @default("ACTIVO") @db.VarChar(20)
+  empleados   empleados[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model credenciales {
+  id              BigInt   @id @default(autoincrement())
+  usuario_id      BigInt   @unique(map: "usuario_id")
+  hash_contrasena String   @db.VarChar(255)
+  estado          String   @default("ACTIVO") @db.VarChar(20)
+  creado_en       DateTime @db.DateTime(0)
+  actualizado_en  DateTime @db.DateTime(0)
+  usuarios        usuarios @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "credenciales_ibfk_1")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model empleados {
+  id             BigInt   @id @default(autoincrement())
+  usuario_id     BigInt   @unique(map: "usuario_id")
+  cargo_id       BigInt
+  creado_en      DateTime @db.DateTime(0)
+  actualizado_en DateTime @db.DateTime(0)
+  usuarios       usuarios @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "empleados_ibfk_1")
+  cargos         cargos   @relation(fields: [cargo_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "empleados_ibfk_2")
+
+  @@index([cargo_id], map: "cargo_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model permisos {
+  id          BigInt        @id @default(autoincrement())
+  nombre      String        @unique(map: "nombre") @db.VarChar(150)
+  descripcion String?       @db.VarChar(255)
+  rol_permiso rol_permiso[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rol_permiso {
+  rol_id     BigInt
+  permiso_id BigInt
+  roles      roles    @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "rol_permiso_ibfk_1")
+  permisos   permisos @relation(fields: [permiso_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "rol_permiso_ibfk_2")
+
+  @@id([rol_id, permiso_id])
+  @@index([permiso_id], map: "permiso_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model roles {
+  id          BigInt        @id @default(autoincrement())
+  nombre      String        @unique(map: "nombre") @db.VarChar(100)
+  descripcion String?       @db.VarChar(255)
+  estado      String        @default("ACTIVO") @db.VarChar(20)
+  rol_permiso rol_permiso[]
+  usuario_rol usuario_rol[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tokens_recuperacion {
+  id           BigInt    @id @default(autoincrement())
+  usuario_id   BigInt
+  hash_token   String    @unique(map: "hash_token") @db.VarChar(255)
+  expira_en    DateTime  @db.DateTime(0)
+  utilizado_en DateTime? @db.DateTime(0)
+  creado_en    DateTime  @db.DateTime(0)
+  usuarios     usuarios  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "tokens_recuperacion_ibfk_1")
+
+  @@index([usuario_id], map: "usuario_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tokens_refresh {
+  id          BigInt    @id @default(autoincrement())
+  usuario_id  BigInt
+  hash_token  String    @unique(map: "hash_token") @db.VarChar(255)
+  expira_en   DateTime  @db.DateTime(0)
+  revocado_en DateTime? @db.DateTime(0)
+  creado_en   DateTime  @db.DateTime(0)
+  usuarios    usuarios  @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "tokens_refresh_ibfk_1")
+
+  @@index([usuario_id], map: "usuario_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model usuario_rol {
+  usuario_id BigInt
+  rol_id     BigInt
+  usuarios   usuarios @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "usuario_rol_ibfk_1")
+  roles      roles    @relation(fields: [rol_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "usuario_rol_ibfk_2")
+
+  @@id([usuario_id, rol_id])
+  @@index([rol_id], map: "rol_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model usuarios {
+  id                  BigInt                @id @default(autoincrement())
+  nombre              String                @db.VarChar(100)
+  apellido            String                @db.VarChar(100)
+  correo              String                @unique(map: "correo") @db.VarChar(150)
+  telefono            String?               @db.VarChar(30)
+  estado              String                @default("ACTIVO") @db.VarChar(20)
+  creado_en           DateTime              @db.DateTime(0)
+  actualizado_en      DateTime              @db.DateTime(0)
+  credenciales        credenciales?
+  empleados           empleados?
+  tokens_recuperacion tokens_recuperacion[]
+  tokens_refresh      tokens_refresh[]
+  usuario_rol         usuario_rol[]
+}
