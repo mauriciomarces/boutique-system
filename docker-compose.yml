@@ -59,9 +59,17 @@ services:
         SERVICE_NAME: users-service
     container_name: boutique-users-service
     restart: unless-stopped
+    env_file:
+      - ./backend/services/users-service/.env
     environment:
       PORT: 4002
+      NODE_ENV: development
+      JWT_ACCESS_SECRET: change-this-development-secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN_DAYS: 7
       DATABASE_URL: mysql://boutique:secret@mysql-users:3306/boutique_users
+    ports:
+      - "4002:4002"
     depends_on:
       mysql-users:
         condition: service_healthy
@@ -79,6 +87,8 @@ services:
     environment:
       PORT: 4003
       DATABASE_URL: mysql://boutique:secret@mysql-products:3306/boutique_products
+    ports:
+      - "4003:4003"
     depends_on:
       mysql-products:
         condition: service_healthy
@@ -96,6 +106,8 @@ services:
     environment:
       PORT: 4004
       DATABASE_URL: mysql://boutique:secret@mysql-inventory:3306/boutique_inventory
+    ports:
+      - "4004:4004"
     depends_on:
       mysql-inventory:
         condition: service_healthy
@@ -129,9 +141,14 @@ services:
         SERVICE_NAME: notifications-service
     container_name: boutique-notifications-service
     restart: unless-stopped
+
+    env_file:
+      - ./backend/services/notifications-service/.env
+
     environment:
       PORT: 4006
       DATABASE_URL: mysql://boutique:secret@mysql-notifications:3306/boutique_notifications
+      
     ports:
       - "4006:4006"
     depends_on:

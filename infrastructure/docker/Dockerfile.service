@@ -13,6 +13,7 @@ RUN npm install -g pnpm
 RUN CI=true pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 
 RUN if [ -f "backend/services/${SERVICE_NAME}/prisma/schema.prisma" ]; then \
+      DATABASE_URL="mysql://build:build@localhost:3306/build" \
       pnpm -C backend/services/${SERVICE_NAME} exec prisma generate; \
     fi
 
