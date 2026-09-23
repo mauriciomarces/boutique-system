@@ -22,6 +22,9 @@ import VerifyEmailPage from "./auth/pages/VerifyEmailPage";
 import ForgotPasswordPage from "./auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "./auth/pages/ResetPasswordPage";
 import AccountPage from "./auth/pages/AccountPage";
+import AdminUsersPage from "./admin/pages/AdminUsersPage";
+import ErrorPage from "./components/ErrorPage";
+import AccountActivationPage from "./auth/pages/AccountActivationPage";
 
 function LandingPage({
   darkMode,
@@ -130,9 +133,51 @@ function App() {
         />
 
         <Route
+          path="/activacion-cuenta"
+          element={<AccountActivationPage />}
+        />
+
+        <Route
           path="/cuenta"
           element={<AccountPage />}
         />
+
+        <Route
+          path="/admin/usuarios"
+          element={<AdminUsersPage />}
+        />
+
+        <Route
+          path="/administracion"
+          element={<AdminUsersPage />}
+        />
+
+        <Route
+          path="/administracion/usuarios"
+          element={<AdminUsersPage />}
+        />
+
+        <Route
+          path="/administracion/usuarios-inactivos"
+          element={<AdminUsersPage />}
+        />
+
+        <Route
+          path="/administracion/roles"
+          element={<AdminUsersPage />}
+        />
+
+        <Route
+          path="/administracion/permisos"
+          element={<AdminUsersPage />}
+        />
+
+        <Route path="/error/400" element={<ErrorPage code={400} />} />
+        <Route path="/error/401" element={<ErrorPage code={401} />} />
+        <Route path="/error/403" element={<ErrorPage code={403} />} />
+        <Route path="/error/404" element={<ErrorPage code={404} />} />
+        <Route path="/error/500" element={<ErrorPage code={500} />} />
+        <Route path="*" element={<ErrorPage code={404} />} />
       </Routes>
     </BrowserRouter>
   );

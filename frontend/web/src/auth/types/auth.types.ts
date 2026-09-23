@@ -5,6 +5,12 @@
   correo: string;
   telefono: string | null;
   estado: string;
+  roles?: Array<{
+    id: string | number;
+    nombre: string;
+    descripcion?: string | null;
+    estado?: string;
+  }>;
   usuario_rol: unknown[];
 }
 

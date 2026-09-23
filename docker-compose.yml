@@ -21,6 +21,8 @@ services:
     restart: unless-stopped
     environment:
       VITE_API_URL: /api
+    volumes:
+      - ./frontend/web:/app/frontend/web
     depends_on:
       - gateway
     networks:
@@ -42,6 +44,8 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:4004
       SALES_SERVICE_URL: http://sales-service:4005
       NOTIFICATIONS_SERVICE_URL: http://notifications-service:4006
+    volumes:
+      - ./backend/gateway:/app/backend/gateway
     depends_on:
       - users-service
       - products-service
@@ -68,6 +72,12 @@ services:
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN_DAYS: 7
       DATABASE_URL: mysql://boutique:secret@mysql-users:3306/boutique_users
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sposabella.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-SposaBellaAdmin2026!}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+      ADMIN_LAST_NAME: ${ADMIN_LAST_NAME:-SposaBella}
+    volumes:
+      - ./backend/services/users-service/src:/app/backend/services/users-service/src
     ports:
       - "4002:4002"
     depends_on:
@@ -148,6 +158,8 @@ services:
     environment:
       PORT: 4006
       DATABASE_URL: mysql://boutique:secret@mysql-notifications:3306/boutique_notifications
+    volumes:
+      - ./backend/services/notifications-service/src:/app/backend/services/notifications-service/src
       
     ports:
       - "4006:4006"

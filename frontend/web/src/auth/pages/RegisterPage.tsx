@@ -20,6 +20,14 @@ function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const passwordChecks = [
+    { label: "8 caracteres mínimo", valid: contrasena.length >= 8 },
+    { label: "Una mayúscula", valid: /[A-Z]/.test(contrasena) },
+    { label: "Una minúscula", valid: /[a-z]/.test(contrasena) },
+    { label: "Un número", valid: /\d/.test(contrasena) },
+    { label: "Un carácter especial", valid: /[^A-Za-z0-9]/.test(contrasena) },
+  ];
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -32,6 +40,26 @@ function RegisterPage() {
       !contrasena
     ) {
       setError("Completa todos los campos obligatorios.");
+      return;
+    }
+
+    if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/.test(nombre.trim())) {
+      setError("El nombre solo puede contener letras y espacios válidos.");
+      return;
+    }
+
+    if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/.test(apellido.trim())) {
+      setError("El apellido solo puede contener letras y espacios válidos.");
+      return;
+    }
+
+    if (telefono && !/^\d{8,9}$/.test(telefono)) {
+      setError("El teléfono debe contener entre 8 y 9 dígitos.");
+      return;
+    }
+
+    if (passwordChecks.some((check) => !check.valid)) {
+      setError("La contraseña debe cumplir todos los requisitos indicados.");
       return;
     }
 
@@ -106,8 +134,9 @@ function RegisterPage() {
             placeholder="Tu nombre"
             autoComplete="given-name"
             value={nombre}
-            onChange={(event) => setNombre(event.target.value)}
+            onChange={(event) => setNombre(event.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü' -]/g, ""))}
             disabled={loading}
+            pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*"
           />
 
           <AuthInput
@@ -117,8 +146,9 @@ function RegisterPage() {
             placeholder="Tu apellido"
             autoComplete="family-name"
             value={apellido}
-            onChange={(event) => setApellido(event.target.value)}
+            onChange={(event) => setApellido(event.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü' -]/g, ""))}
             disabled={loading}
+            pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*"
           />
         </div>
 
@@ -142,8 +172,11 @@ function RegisterPage() {
           placeholder="7XXXXXXX"
           autoComplete="tel"
           value={telefono}
-          onChange={(event) => setTelefono(event.target.value)}
+          onChange={(event) => setTelefono(event.target.value.replace(/\D/g, "").slice(0, 9))}
           disabled={loading}
+          inputMode="numeric"
+          maxLength={9}
+          pattern="\d{8,9}"
         />
 
         <AuthInput
@@ -158,6 +191,14 @@ function RegisterPage() {
           disabled={loading}
         />
 
+        <div className="grid gap-1 text-xs theme-text-muted sm:grid-cols-2">
+          {passwordChecks.map((check) => (
+            <span key={check.label} className={check.valid ? "text-[#47745f]" : ""}>
+              {check.valid ? "✓" : "○"} {check.label}
+            </span>
+          ))}
+        </div>
+
         <AuthInput
           id="confirmacion"
           name="confirmacion"
@@ -169,6 +210,12 @@ function RegisterPage() {
           onChange={(event) => setConfirmacion(event.target.value)}
           disabled={loading}
         />
+
+        {confirmacion && (
+          <p className={`text-xs ${contrasena === confirmacion ? "text-[#47745f]" : "text-red-500"}`}>
+            {contrasena === confirmacion ? "Las contraseñas coinciden." : "Las contraseñas no coinciden."}
+          </p>
+        )}
 
         <button
           type="submit"

@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 function Hero() {
   return (
     <section
@@ -86,6 +88,13 @@ function Hero() {
             >
               Nuestra historia
             </a>
+
+            <Link
+              to="/login"
+              className="inline-flex items-center justify-center rounded-full border border-[#6CAD91] px-7 py-4 text-sm font-semibold text-[#47745f] transition-all duration-300 hover:-translate-y-1 hover:bg-[#E9F6EF] dark:text-[#b9e2d0] dark:hover:bg-[#23362d]"
+            >
+              Acceder a mi cuenta
+            </Link>
 
           </div>
 

@@ -26,6 +26,11 @@ function LoginPage() {
       return;
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo.trim())) {
+      setError("Ingresa un correo electrónico válido.");
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -49,7 +54,11 @@ function LoginPage() {
         JSON.stringify(response.user),
       );
 
-      navigate("/cuenta");
+      const hasAdminRole = response.user.roles?.some(
+        (role) => role.nombre === "ADMIN",
+      );
+
+      navigate(hasAdminRole ? "/administracion/usuarios" : "/cuenta");
     } catch (err) {
       setError(
         err instanceof Error

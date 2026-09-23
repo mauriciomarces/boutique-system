@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
@@ -85,6 +86,18 @@ export class AppController {
     );
   }
 
+  @Post('api/users/:id/reenviar-activacion')
+  resendActivation(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      `http://users-service:4002/usuarios/${id}/reenviar-activacion`,
+      {},
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
   // =========================================================
   // AUTHENTICATION
   // =========================================================
@@ -165,6 +178,14 @@ export class AppController {
     );
   }
 
+  @Post('api/users/auth/activate-account')
+  activateAccount(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://users-service:4002/auth/activate-account',
+      body,
+    );
+  }
+
   // =========================================================
   // OTHER MICROSERVICES
   // =========================================================
@@ -191,9 +212,147 @@ export class AppController {
   }
 
   @Get('api/notifications')
-  getNotifications() {
+  getNotifications(@Headers('authorization') authorization?: string) {
     return this.microservicesService.get(
       'http://notifications-service:4006/notificaciones',
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/roles')
+  getRoles(@Headers('authorization') authorization?: string) {
+    return this.microservicesService.get(
+      'http://users-service:4002/roles',
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/roles/:id')
+  getRole(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://users-service:4002/roles/${id}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/roles')
+  createRole(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://users-service:4002/roles',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Put('api/roles/:id')
+  updateRole(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.put(
+      `http://users-service:4002/roles/${id}`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Patch('api/roles/:id/estado')
+  changeRoleStatus(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.patch(
+      `http://users-service:4002/roles/${id}/estado`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/permisos')
+  getPermisos(@Headers('authorization') authorization?: string) {
+    return this.microservicesService.get(
+      'http://users-service:4002/permisos',
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/usuarios/:id/roles')
+  getUserRoles(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://users-service:4002/usuarios/${id}/roles`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/usuarios/:id/roles')
+  assignUserRole(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      `http://users-service:4002/usuarios/${id}/roles`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Delete('api/usuarios/:id/roles/:rolId')
+  removeUserRole(
+    @Param('id') id: string,
+    @Param('rolId') rolId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.delete(
+      `http://users-service:4002/usuarios/${id}/roles/${rolId}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/roles/:id/permisos')
+  getRolePermissions(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://users-service:4002/roles/${id}/permisos`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Delete('api/roles/:id/permisos/:permisoId')
+  removeRolePermission(
+    @Param('id') id: string,
+    @Param('permisoId') permisoId: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.delete(
+      `http://users-service:4002/roles/${id}/permisos/${permisoId}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/roles/:id/permisos')
+  assignRolePermission(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      `http://users-service:4002/roles/${id}/permisos`,
+      body,
+      this.getForwardedHeaders(authorization),
     );
   }
 

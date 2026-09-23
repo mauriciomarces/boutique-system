@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 interface NavbarProps {
   darkMode: boolean;
@@ -179,8 +180,8 @@ function Navbar({ darkMode, setDarkMode }: NavbarProps) {
 
           {/* CTA */}
 
-          <a
-            href="#contacto"
+          <Link
+            to="/login"
             className="
               theme-button-dark
               rounded-full
@@ -191,13 +192,43 @@ function Navbar({ darkMode, setDarkMode }: NavbarProps) {
               hover:shadow-lg
             "
           >
-            Visítanos
-          </a>
+            Iniciar sesión
+          </Link>
+
+          <Link
+            to="/admin/usuarios"
+            className="
+              rounded-full
+              border theme-border
+              px-5 py-2.5
+              text-xs font-semibold
+              theme-text
+              transition-all duration-300
+              hover:-translate-y-0.5
+              hover:shadow-lg
+            "
+          >
+            Administración
+          </Link>
         </div>
 
         {/* MOBILE ACTIONS */}
 
         <div className="flex items-center gap-2 md:hidden">
+
+          <Link
+            to="/login"
+            className="theme-button-dark rounded-full px-3 py-2 text-[10px] font-semibold"
+          >
+            Login
+          </Link>
+
+          <Link
+            to="/admin/usuarios"
+            className="rounded-full border theme-border px-3 py-2 text-[10px] font-semibold theme-text"
+          >
+            Admin
+          </Link>
 
           <button
             onClick={toggleTheme}
@@ -319,6 +350,14 @@ function Navbar({ darkMode, setDarkMode }: NavbarProps) {
           >
             Visítanos
           </a>
+
+          <Link
+            to="/login"
+            onClick={() => setOpen(false)}
+            className="theme-button-dark mt-2 block rounded-xl px-4 py-3.5 text-center text-sm font-semibold shadow-sm"
+          >
+            Iniciar sesión
+          </Link>
         </nav>
       </div>
     </header>

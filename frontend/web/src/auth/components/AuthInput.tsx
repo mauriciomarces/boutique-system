@@ -1,4 +1,5 @@
-﻿import type { InputHTMLAttributes } from "react";
+﻿import { useState } from "react";
+import type { InputHTMLAttributes } from "react";
 
 interface AuthInputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -11,6 +12,9 @@ function AuthInput({
   id,
   ...props
 }: AuthInputProps) {
+  const [visible, setVisible] = useState(false);
+  const isPassword = props.type === "password";
+
   return (
     <div>
       <label
@@ -20,10 +24,12 @@ function AuthInput({
         {label}
       </label>
 
-      <input
-        id={id}
-        {...props}
-        className={`
+      <div className="relative">
+        <input
+          id={id}
+          {...props}
+          type={isPassword && visible ? "text" : props.type}
+          className={`
           w-full rounded-xl border
           bg-[var(--bg-secondary)]
           px-4 py-3
@@ -39,8 +45,21 @@ function AuthInput({
               : "theme-border"
           }
           ${props.className || ""}
-        `}
-      />
+          ${isPassword ? "pr-16" : ""}
+          `}
+        />
+
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setVisible((value) => !value)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold theme-text-muted hover:bg-[var(--bg-tertiary)]"
+            aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+          >
+            {visible ? "Ocultar" : "Ver"}
+          </button>
+        )}
+      </div>
 
       {error && (
         <p className="mt-2 text-xs text-red-500">
