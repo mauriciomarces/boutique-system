@@ -44,6 +44,8 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:4004
       SALES_SERVICE_URL: http://sales-service:4005
       NOTIFICATIONS_SERVICE_URL: http://notifications-service:4006
+      LOGIC_CORRELATION_SERVICE_URL: http://logic-correlation-service:4007
+      AI_SERVICE_URL: http://ai-service:4008
     volumes:
       - ./backend/gateway:/app/backend/gateway
     depends_on:
@@ -52,6 +54,8 @@ services:
       - inventory-service
       - sales-service
       - notifications-service
+      - logic-correlation-service
+      - ai-service
     networks:
       - boutique-network
 
@@ -271,6 +275,52 @@ services:
       retries: 10
     ports:
       - "3312:3306"
+    networks:
+      - boutique-network
+
+  logic-correlation-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: logic-correlation-service
+    container_name: boutique-logic-correlation-service
+    restart: unless-stopped
+    environment:
+      PORT: 4007
+      NODE_ENV: development
+      AI_SERVICE_URL: http://ai-service:4008
+    volumes:
+      - ./backend/services/logic-correlation-service/src:/app/backend/services/logic-correlation-service/src
+    ports:
+      - "4007:4007"
+    networks:
+      - boutique-network
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.ai
+    container_name: boutique-ai-service
+    restart: unless-stopped
+    environment:
+      PORT: 4008
+      DATABASE_URL: mysql://boutique:secret@mysql-ai:3306/boutique_ia
+      AI_DATA_DIR: /app/data
+      AI_MODELS_DIR: /app/models
+      AI_METRICS_DIR: /app/metrics
+    volumes:
+      - ./backend/services/ai-service/app:/app/app
+      - ./backend/services/ai-service/data:/app/data
+      - ./backend/services/ai-service/models:/app/models
+      - ./backend/services/ai-service/metrics:/app/metrics
+      - ./backend/services/ai-service/generate_dataset.py:/app/generate_dataset.py
+      - ./backend/services/ai-service/train.py:/app/train.py
+    ports:
+      - "4008:4008"
+    depends_on:
+      mysql-ai:
+        condition: service_healthy
     networks:
       - boutique-network
 

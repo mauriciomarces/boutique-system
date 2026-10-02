@@ -211,6 +211,85 @@ export class AppController {
     );
   }
 
+  @Get('api/correlation/health')
+  correlationHealth() {
+    return this.microservicesService.get(
+      'http://logic-correlation-service:4007/health',
+    );
+  }
+
+  @Post('api/correlation/events')
+  ingestCorrelationEvent(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://logic-correlation-service:4007/events',
+      body,
+    );
+  }
+
+  @Post('api/correlation/correlations/analyze')
+  analyzeCorrelation(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://logic-correlation-service:4007/correlations/analyze',
+      body,
+    );
+  }
+
+  @Post('api/correlation/features/generate')
+  generateCorrelationFeatures(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://logic-correlation-service:4007/features/generate',
+      body,
+    );
+  }
+
+  @Post('api/correlation/analyze-and-classify')
+  analyzeAndClassify(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://logic-correlation-service:4007/analyze-and-classify',
+      body,
+    );
+  }
+
+  @Get('api/ai/health')
+  aiHealth() {
+    return this.microservicesService.get('http://ai-service:4008/health');
+  }
+
+  @Post('api/ai/train')
+  aiTrain(@Body() body: unknown) {
+    return this.microservicesService.post('http://ai-service:4008/train', body);
+  }
+
+  @Post('api/ai/predict')
+  aiPredict(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://ai-service:4008/predict',
+      body,
+    );
+  }
+
+  @Get('api/ai/training')
+  aiTrainingList() {
+    return this.microservicesService.get('http://ai-service:4008/training');
+  }
+
+  @Get('api/ai/training/:id')
+  aiTrainingDetail(@Param('id') id: string) {
+    return this.microservicesService.get(
+      `http://ai-service:4008/training/${id}`,
+    );
+  }
+
+  @Get('api/ai/metrics')
+  aiMetrics() {
+    return this.microservicesService.get('http://ai-service:4008/metrics');
+  }
+
+  @Get('api/ai/model')
+  aiModel() {
+    return this.microservicesService.get('http://ai-service:4008/model');
+  }
+
   @Get('api/notifications')
   getNotifications(@Headers('authorization') authorization?: string) {
     return this.microservicesService.get(
