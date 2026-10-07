@@ -15,12 +15,9 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.frontend
+      context: ./frontend/web
+      dockerfile: ../../infrastructure/docker/Dockerfile.frontend
     container_name: boutique-frontend
-    restart: unless-stopped
-    environment:
-      VITE_API_URL: /api
     depends_on:
       - gateway
     networks:
@@ -42,15 +39,21 @@ services:
       INVENTORY_SERVICE_URL: http://inventory-service:4004
       SALES_SERVICE_URL: http://sales-service:4005
       NOTIFICATIONS_SERVICE_URL: http://notifications-service:4006
+      LOGIC_CORRELATION_SERVICE_URL: http://logic-correlation-service:4007
+      AI_SERVICE_URL: http://ai-service:4008
+    volumes:
+      - ./backend/gateway:/app/backend/gateway
+      - /app/backend/gateway/node_modules
     depends_on:
       - users-service
       - products-service
       - inventory-service
       - sales-service
       - notifications-service
+      - logic-correlation-service
+      - ai-service
     networks:
       - boutique-network
-
   users-service:
     build:
       context: .
@@ -59,9 +62,23 @@ services:
         SERVICE_NAME: users-service
     container_name: boutique-users-service
     restart: unless-stopped
+    env_file:
+      - ./backend/services/users-service/.env
     environment:
       PORT: 4002
+      NODE_ENV: development
+      JWT_ACCESS_SECRET: change-this-development-secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN_DAYS: 7
       DATABASE_URL: mysql://boutique:secret@mysql-users:3306/boutique_users
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sposabella.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-SposaBellaAdmin2026!}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+      ADMIN_LAST_NAME: ${ADMIN_LAST_NAME:-SposaBella}
+    volumes:
+      - ./backend/services/users-service/src:/app/backend/services/users-service/src
+    ports:
+      - "4002:4002"
     depends_on:
       mysql-users:
         condition: service_healthy
@@ -79,6 +96,8 @@ services:
     environment:
       PORT: 4003
       DATABASE_URL: mysql://boutique:secret@mysql-products:3306/boutique_products
+    ports:
+      - "4003:4003"
     depends_on:
       mysql-products:
         condition: service_healthy
@@ -96,6 +115,8 @@ services:
     environment:
       PORT: 4004
       DATABASE_URL: mysql://boutique:secret@mysql-inventory:3306/boutique_inventory
+    ports:
+      - "4004:4004"
     depends_on:
       mysql-inventory:
         condition: service_healthy
@@ -129,9 +150,16 @@ services:
         SERVICE_NAME: notifications-service
     container_name: boutique-notifications-service
     restart: unless-stopped
+
+    env_file:
+      - ./backend/services/notifications-service/.env
+
     environment:
       PORT: 4006
       DATABASE_URL: mysql://boutique:secret@mysql-notifications:3306/boutique_notifications
+    volumes:
+      - ./backend/services/notifications-service/src:/app/backend/services/notifications-service/src
+      
     ports:
       - "4006:4006"
     depends_on:
@@ -245,6 +273,52 @@ services:
     networks:
       - boutique-network
 
+  logic-correlation-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: logic-correlation-service
+    container_name: boutique-logic-correlation-service
+    restart: unless-stopped
+    environment:
+      PORT: 4007
+      NODE_ENV: development
+      AI_SERVICE_URL: http://ai-service:4008
+    volumes:
+      - ./backend/services/logic-correlation-service/src:/app/backend/services/logic-correlation-service/src
+    ports:
+      - "4007:4007"
+    networks:
+      - boutique-network
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.ai
+    container_name: boutique-ai-service
+    restart: unless-stopped
+    environment:
+      PORT: 4008
+      DATABASE_URL: mysql+pymysql://boutique:secret@mysql-ai:3306/boutique_ia
+      AI_DATA_DIR: /app/data
+      AI_MODELS_DIR: /app/models
+      AI_METRICS_DIR: /app/metrics
+    volumes:
+      - ./backend/services/ai-service/app:/app/app
+      - ./backend/services/ai-service/data:/app/data
+      - ./backend/services/ai-service/models:/app/models
+      - ./backend/services/ai-service/metrics:/app/metrics
+      - ./backend/services/ai-service/generate_dataset.py:/app/generate_dataset.py
+      - ./backend/services/ai-service/train.py:/app/train.py
+    ports:
+      - "4008:4008"
+    depends_on:
+      mysql-ai:
+        condition: service_healthy
+    networks:
+      - boutique-network
+
   mysql-ai:
     image: mysql:8
     container_name: boutique-mysql-ai
@@ -295,3 +369,5 @@ volumes:
   sales-db-data:
   notifications-db-data:
   ai-db-data:
+  frontend-node-modules:
+

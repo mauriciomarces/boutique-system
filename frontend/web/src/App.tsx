@@ -1,4 +1,9 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+} from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
@@ -10,6 +15,67 @@ import Process from "./components/Process";
 import Testimonials from "./components/Testimonials";
 import CTA from "./components/CTA";
 import Footer from "./components/Footer";
+
+import LoginPage from "./auth/pages/LoginPage";
+import RegisterPage from "./auth/pages/RegisterPage";
+import VerifyEmailPage from "./auth/pages/VerifyEmailPage";
+import ForgotPasswordPage from "./auth/pages/ForgotPasswordPage";
+import ResetPasswordPage from "./auth/pages/ResetPasswordPage";
+import AccountPage from "./auth/pages/AccountPage";
+import AdminUsersPage from "./admin/pages/AdminUsersPage";
+import ErrorPage from "./components/ErrorPage";
+import AccountActivationPage from "./auth/pages/AccountActivationPage";
+
+import ClientsPage from "./clients/pages/ClientsPage";
+import ProductsPage from "./products/pages/ProductsPage";
+import CategoriesPage from "./products/pages/CategoriesPage";
+
+import TrainingDashboardPage from "./analysis/pages/TrainingDashboardPage";
+import TrainingDetailPage from "./analysis/pages/TrainingDetailPage";
+import DetectionPage from "./analysis/pages/DetectionPage";
+
+function LandingPage({
+  darkMode,
+  setDarkMode,
+}: {
+  darkMode: boolean;
+  setDarkMode: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  return (
+    <div className="theme-bg min-h-screen transition-colors duration-500">
+      <Navbar
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+      />
+
+      <main>
+        <section id="inicio">
+          <Hero />
+        </section>
+
+        <Marquee />
+
+        <section id="experiencia">
+          <Benefits />
+        </section>
+
+        <section id="coleccion">
+          <Collections />
+        </section>
+
+        <Services />
+
+        <Process />
+
+        <Testimonials />
+
+        <CTA />
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
 
 function App() {
   const [darkMode, setDarkMode] = useState(() => {
@@ -37,42 +103,144 @@ function App() {
   }, [darkMode]);
 
   return (
-    <div className="theme-bg min-h-screen transition-colors duration-500">
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <LandingPage
+              darkMode={darkMode}
+              setDarkMode={setDarkMode}
+            />
+          }
+        />
 
-      <Navbar
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
-      />
+        <Route
+          path="/login"
+          element={<LoginPage />}
+        />
 
-      <main>
+        <Route
+          path="/registro"
+          element={<RegisterPage />}
+        />
 
-        <section id="inicio">
-          <Hero />
-        </section>
+        <Route
+          path="/verificar-correo"
+          element={<VerifyEmailPage />}
+        />
 
-        <Marquee />
+        <Route
+          path="/recuperar-contrasena"
+          element={<ForgotPasswordPage />}
+        />
 
-        <section id="experiencia">
-          <Benefits />
-        </section>
+        <Route
+          path="/restablecer-contrasena"
+          element={<ResetPasswordPage />}
+        />
 
-        <section id="coleccion">
-          <Collections />
-        </section>
+        <Route
+          path="/activacion-cuenta"
+          element={<AccountActivationPage />}
+        />
 
-        <Services />
+        <Route
+          path="/cuenta"
+          element={<AccountPage />}
+        />
 
-        <Process />
+        <Route
+          path="/admin/usuarios"
+          element={<AdminUsersPage />}
+        />
 
-        <Testimonials />
+        <Route
+          path="/administracion"
+          element={<AdminUsersPage />}
+        />
 
-        <CTA />
+        <Route
+          path="/administracion/usuarios"
+          element={<AdminUsersPage />}
+        />
 
-      </main>
+        <Route
+          path="/administracion/usuarios-inactivos"
+          element={<AdminUsersPage />}
+        />
 
-      <Footer />
+        <Route
+          path="/administracion/roles"
+          element={<AdminUsersPage />}
+        />
 
-    </div>
+        <Route
+          path="/administracion/permisos"
+          element={<AdminUsersPage />}
+        />
+
+        <Route
+          path="/administracion/clientes"
+          element={<ClientsPage />}
+        />
+
+        <Route
+          path="/administracion/productos"
+          element={<ProductsPage />}
+        />
+
+        <Route
+          path="/administracion/categorias"
+          element={<CategoriesPage />}
+        />
+
+        <Route
+          path="/analisis/entrenamiento"
+          element={<TrainingDashboardPage />}
+        />
+
+        <Route
+          path="/analisis/entrenamiento/:id"
+          element={<TrainingDetailPage />}
+        />
+
+        <Route
+          path="/analisis/deteccion"
+          element={<DetectionPage />}
+        />
+
+        <Route
+          path="/error/400"
+          element={<ErrorPage code={400} />}
+        />
+
+        <Route
+          path="/error/401"
+          element={<ErrorPage code={401} />}
+        />
+
+        <Route
+          path="/error/403"
+          element={<ErrorPage code={403} />}
+        />
+
+        <Route
+          path="/error/404"
+          element={<ErrorPage code={404} />}
+        />
+
+        <Route
+          path="/error/500"
+          element={<ErrorPage code={500} />}
+        />
+
+        <Route
+          path="*"
+          element={<ErrorPage code={404} />}
+        />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

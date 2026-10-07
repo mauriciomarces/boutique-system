@@ -47,3 +47,17 @@ temp/
 /databases/*/data/
 **/postgres-data/
 **/.DS_Store
+
+# AI / correlation experimental artifacts
+backend/services/ai-service/data/raw/*
+!backend/services/ai-service/data/raw/.gitkeep
+!backend/services/ai-service/data/README.md
+backend/services/ai-service/data/processed/*.csv
+backend/services/ai-service/data/processed/*.json
+backend/services/ai-service/data/synthetic/*
+!backend/services/ai-service/data/synthetic/.gitkeep
+backend/services/ai-service/data/*.sqlite
+backend/services/ai-service/models/**/*.joblib
+backend/services/ai-service/models/**/*.json
+backend/services/ai-service/metrics/*.json
+*.joblib

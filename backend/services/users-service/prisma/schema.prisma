@@ -94,6 +94,20 @@ model tokens_refresh {
   @@index([usuario_id], map: "usuario_id")
 }
 
+model tokens_verificacion {
+  id           BigInt    @id @default(autoincrement())
+  usuario_id   BigInt
+  hash_codigo  String    @unique(map: "hash_codigo") @db.VarChar(255)
+  expira_en    DateTime  @db.DateTime(0)
+  utilizado_en DateTime? @db.DateTime(0)
+  intentos     Int       @default(0)
+  creado_en    DateTime  @db.DateTime(0)
+
+  usuarios usuarios @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "tokens_verificacion_ibfk_1")
+
+  @@index([usuario_id], map: "usuario_id")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model usuario_rol {
   usuario_id BigInt
@@ -115,9 +129,12 @@ model usuarios {
   estado              String                @default("ACTIVO") @db.VarChar(20)
   creado_en           DateTime              @db.DateTime(0)
   actualizado_en      DateTime              @db.DateTime(0)
+  correo_verificado   Boolean               @default(false)
+  verificado_en       DateTime?             @db.DateTime(0)
   credenciales        credenciales?
   empleados           empleados?
   tokens_recuperacion tokens_recuperacion[]
   tokens_refresh      tokens_refresh[]
+  tokens_verificacion tokens_verificacion[]
   usuario_rol         usuario_rol[]
 }

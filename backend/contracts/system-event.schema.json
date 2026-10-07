@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SposaBellaSystemEvent",
+  "description": "Contrato común de evento de dominio. Los microservicios (users, products, inventory, sales, notifications) podrán emitirlo posteriormente hacia logic-correlation-service. No incluye datos personales innecesarios.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "usuario_id",
+    "tipo_evento",
+    "entidad",
+    "timestamp",
+    "resultado"
+  ],
+  "properties": {
+    "event_id": { "type": "string", "description": "Identificador único (UUID)." },
+    "service": {
+      "type": "string",
+      "description": "Servicio emisor. Ej: sales-service.",
+      "examples": [
+        "users-service",
+        "products-service",
+        "inventory-service",
+        "sales-service",
+        "notifications-service"
+      ]
+    },
+    "usuario_id": { "type": "integer" },
+    "tipo_evento": { "type": "string" },
+    "entidad": { "type": "string" },
+    "entidad_id": { "type": ["integer", "string", "null"] },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "resultado": { "type": "string", "enum": ["EXITOSO", "FALLIDO"] },
+    "ip": { "type": "string" },
+    "metadata": { "type": "object" }
+  }
+}

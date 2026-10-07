@@ -1,0 +1,38 @@
+{
+  "version": "v1",
+  "label": {
+    "name": "label",
+    "values": { "0": "NORMAL", "1": "ANOMALO" },
+    "source": "Escenario sintético conocido en entrenamiento. Nunca se usa como feature."
+  },
+  "features": [
+    "event_count_5m",
+    "event_count_10m",
+    "event_count_30m",
+    "failed_login_count",
+    "successful_login_count",
+    "failed_login_ratio",
+    "sales_count",
+    "cancelled_sales_count",
+    "cancellation_ratio",
+    "stock_change_count",
+    "price_change_count",
+    "admin_action_count",
+    "role_change_count",
+    "user_change_count",
+    "sales_after_stock_change",
+    "sales_after_price_change",
+    "time_since_last_login",
+    "time_since_last_stock_change",
+    "time_since_last_price_change",
+    "events_per_minute",
+    "unique_entities_modified",
+    "failed_login_rule",
+    "cancellation_rule",
+    "stock_sale_rule",
+    "price_sale_rule",
+    "admin_activity_rule",
+    "combined_pattern_rule",
+    "risk_rule_count"
+  ]
+}
