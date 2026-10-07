@@ -19,7 +19,6 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier, _tree
 
-from app.db import init_db, save_training_run
 from app.config import (
     CURRENT_METADATA_PATH,
     CURRENT_MODEL_PATH,
@@ -144,10 +143,6 @@ def train_decision_tree(
         json.dumps(metrics, indent=2),
         encoding="utf-8",
     )
-
-    init_db()
-    save_training_run(metadata)
-
     return metadata
 
 

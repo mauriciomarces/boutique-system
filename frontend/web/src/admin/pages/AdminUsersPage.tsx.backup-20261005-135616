@@ -95,7 +95,8 @@ function AdminUsersPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const token = localStorage.getItem("sposabella_access_token");
-  const section: Section = location.pathname.endsWith(
+
+  const initialSection: Section = location.pathname.endsWith(
     "/usuarios-inactivos",
   )
     ? "inactivos"
@@ -104,6 +105,8 @@ function AdminUsersPage() {
       : location.pathname.endsWith("/permisos")
         ? "permisos"
         : "usuarios";
+
+  const [section, setSection] = useState<Section>(initialSection);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -212,6 +215,19 @@ function AdminUsersPage() {
     );
   };
 
+  const changeSection = (next: Section) => {
+    setSection(next);
+    setPage(1);
+    setSearch("");
+    setSidebarOpen(false);
+
+    navigate(
+      `/administracion/${
+        next === "inactivos" ? "usuarios-inactivos" : next
+      }`,
+      { replace: true },
+    );
+  };
 
   const closeModal = () => {
     setModal(null);
@@ -620,7 +636,7 @@ function AdminUsersPage() {
     type="button"
     onClick={() => setSidebarOpen((value) => !value)}
     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border theme-border bg-[var(--bg)] theme-text shadow-lg lg:hidden"
-    aria-label="Abrir menú administrativo"
+    aria-label="Abrir men� administrativo"
     aria-expanded={sidebarOpen}
   >
     <span className="flex flex-col gap-1.5">
@@ -641,6 +657,15 @@ function AdminUsersPage() {
 </div>
 
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen((value) => !value)}
+              className="absolute left-4 top-1/2 z-50 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border theme-border bg-[var(--bg)] theme-text shadow-lg lg:hidden"
+              aria-label="Abrir menú administrativo"
+              aria-expanded={sidebarOpen}
+            >
+              <span className="flex flex-col gap-1.5"><span className="block h-0.5 w-5 rounded-full bg-current" /><span className="block h-0.5 w-5 rounded-full bg-current" /><span className="block h-0.5 w-5 rounded-full bg-current" /></span>
+            </button>
 
             <span className="hidden text-sm theme-text-soft sm:block">
               {currentUser
@@ -661,12 +686,6 @@ function AdminUsersPage() {
           </div>
         </div>
       </header>
-
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:px-8">
-        <AdministrationSidebar
-          sidebarOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
 
         <main className="min-w-0 flex-1">
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -1385,7 +1404,3 @@ function AdminUsersPage() {
 }
 
 export default AdminUsersPage;
-
-
-
-

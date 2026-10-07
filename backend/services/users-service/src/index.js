@@ -1167,6 +1167,21 @@ app.patch(
         });
       }
 
+      if (estado === 'INACTIVO') {
+        const usuariosAsignados = await prisma.usuario_rol.count({
+          where: {
+            rol_id: id,
+          },
+        });
+
+        if (usuariosAsignados > 0) {
+          return res.status(409).json({
+            error:
+              'No se puede desactivar el rol porque existen usuarios asignados a este rol',
+          });
+        }
+      }
+
       const rol = await prisma.roles.update({
         where: { id },
         data: {

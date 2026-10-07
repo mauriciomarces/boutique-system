@@ -12,8 +12,8 @@ model categorias {
   nombre         String      @unique(map: "nombre") @db.VarChar(100)
   descripcion    String?     @db.VarChar(255)
   estado         String      @default("ACTIVO") @db.VarChar(20)
-  creado_en      DateTime    @db.DateTime(0)
-  actualizado_en DateTime    @db.DateTime(0)
+  creado_en      DateTime    @default(now()) @db.DateTime(0)
+  actualizado_en DateTime    @updatedAt @db.DateTime(0)
   productos      productos[]
 }
 
@@ -24,8 +24,8 @@ model productos {
   nombre         String      @db.VarChar(150)
   descripcion    String?     @db.Text
   estado         String      @default("ACTIVO") @db.VarChar(20)
-  creado_en      DateTime    @db.DateTime(0)
-  actualizado_en DateTime    @db.DateTime(0)
+  creado_en      DateTime    @default(now()) @db.DateTime(0)
+  actualizado_en DateTime    @updatedAt @db.DateTime(0)
   categorias     categorias  @relation(fields: [categoria_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "productos_ibfk_1")
   variantes      variantes[]
 
@@ -41,8 +41,8 @@ model variantes {
   color          String?   @db.VarChar(50)
   precio         Decimal   @db.Decimal(10, 2)
   estado         String    @default("ACTIVO") @db.VarChar(20)
-  creado_en      DateTime  @db.DateTime(0)
-  actualizado_en DateTime  @db.DateTime(0)
+  creado_en      DateTime  @default(now()) @db.DateTime(0)
+  actualizado_en DateTime  @updatedAt @db.DateTime(0)
   productos      productos @relation(fields: [producto_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "variantes_ibfk_1")
 
   @@index([producto_id], map: "producto_id")

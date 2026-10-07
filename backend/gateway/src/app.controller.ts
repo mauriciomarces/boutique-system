@@ -1,4 +1,4 @@
-import {
+﻿import {
   Body,
   Controller,
   Delete,
@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 
 import { AppService } from './app.service';
@@ -190,12 +191,6 @@ export class AppController {
   // OTHER MICROSERVICES
   // =========================================================
 
-  @Get('api/products')
-  getProducts() {
-    return this.microservicesService.get(
-      'http://products-service:4003/productos',
-    );
-  }
 
   @Get('api/inventory')
   getInventory() {
@@ -208,6 +203,50 @@ export class AppController {
   getSales() {
     return this.microservicesService.get(
       'http://sales-service:4005/ventas',
+    );
+  }
+
+  @Get('api/clientes')
+  getClientes() {
+    return this.microservicesService.get(
+      'http://sales-service:4005/clientes',
+    );
+  }
+
+  @Get('api/clientes/:id')
+  getCliente(@Param('id') id: string) {
+    return this.microservicesService.get(
+      `http://sales-service:4005/clientes/${id}`,
+    );
+  }
+
+  @Post('api/clientes')
+  createCliente(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://sales-service:4005/clientes',
+      body,
+    );
+  }
+
+  @Put('api/clientes/:id')
+  updateCliente(
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.microservicesService.put(
+      `http://sales-service:4005/clientes/${id}`,
+      body,
+    );
+  }
+
+  @Patch('api/clientes/:id/estado')
+  changeClienteStatus(
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.microservicesService.patch(
+      `http://sales-service:4005/clientes/${id}/estado`,
+      body,
     );
   }
 
@@ -434,7 +473,99 @@ export class AppController {
       this.getForwardedHeaders(authorization),
     );
   }
+  // =========================================================
+  // CATEGORIAS
+  // =========================================================
 
+  @Get('api/categorias')
+  getCategorias(@Query('buscar') buscar?: string) {
+    const query = buscar ? `?buscar=${encodeURIComponent(buscar)}` : '';
+
+    return this.microservicesService.get(
+      `http://products-service:4003/categorias${query}`,
+    );
+  }
+
+  @Get('api/categorias/:id')
+  getCategoria(@Param('id') id: string) {
+    return this.microservicesService.get(
+      `http://products-service:4003/categorias/${id}`,
+    );
+  }
+
+  @Post('api/categorias')
+  createCategoria(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://products-service:4003/categorias',
+      body,
+    );
+  }
+
+  @Put('api/categorias/:id')
+  updateCategoria(@Param('id') id: string, @Body() body: unknown) {
+    return this.microservicesService.put(
+      `http://products-service:4003/categorias/${id}`,
+      body,
+    );
+  }
+
+  @Patch('api/categorias/:id/estado')
+  changeCategoriaStatus(
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.microservicesService.patch(
+      `http://products-service:4003/categorias/${id}/estado`,
+      body,
+    );
+  }
+
+  // =========================================================
+  // PRODUCTOS
+  // =========================================================
+
+  @Get('api/productos')
+  getProductos(@Query('buscar') buscar?: string) {
+    const query = buscar ? `?buscar=${encodeURIComponent(buscar)}` : '';
+
+    return this.microservicesService.get(
+      `http://products-service:4003/productos${query}`,
+    );
+  }
+
+  @Get('api/productos/:id')
+  getProducto(@Param('id') id: string) {
+    return this.microservicesService.get(
+      `http://products-service:4003/productos/${id}`,
+    );
+  }
+
+  @Post('api/productos')
+  createProducto(@Body() body: unknown) {
+    return this.microservicesService.post(
+      'http://products-service:4003/productos',
+      body,
+    );
+  }
+
+  @Put('api/productos/:id')
+  updateProducto(@Param('id') id: string, @Body() body: unknown) {
+    return this.microservicesService.put(
+      `http://products-service:4003/productos/${id}`,
+      body,
+    );
+  }
+
+  @Patch('api/productos/:id/estado')
+  changeProductoStatus(
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.microservicesService.patch(
+      `http://products-service:4003/productos/${id}/estado`,
+      body,
+    );
+  }
   // =========================================================
   // HELPERS
   // =========================================================

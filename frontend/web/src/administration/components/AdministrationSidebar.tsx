@@ -1,0 +1,106 @@
+﻿import { useLocation, useNavigate } from "react-router-dom";
+
+type AdministrationSidebarProps = {
+  sidebarOpen: boolean;
+  onClose: () => void;
+};
+
+function AdministrationSidebar({
+  sidebarOpen,
+  onClose,
+}: AdministrationSidebarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const goTo = (path: string) => {
+    onClose();
+    navigate(path);
+  };
+
+  const navButton = (label: string, path: string) => {
+    const active =
+      location.pathname === path ||
+      location.pathname.startsWith(`${path}/`);
+
+    return (
+      <button
+        key={path}
+        type="button"
+        onClick={() => goTo(path)}
+        className={`flex w-full justify-between rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
+          active
+            ? "bg-[var(--bg-secondary)] theme-text"
+            : "theme-text-soft hover:bg-[var(--bg-secondary)]"
+        }`}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  return (
+    <>
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar menú"
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+        />
+      )}
+
+      <aside
+        className={`${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } fixed inset-y-0 left-0 z-50 w-72 border-r theme-border bg-[var(--bg)] p-4 pt-24 shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:block lg:w-64 lg:translate-x-0 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}
+      >
+        <div className="glass soft-shadow rounded-2xl p-4 lg:sticky lg:top-6">
+          <p className="px-4 pb-3 text-[10px] font-semibold uppercase tracking-[0.2em] theme-text-muted">
+            Usuarios y acceso
+          </p>
+
+          <nav className="space-y-1">
+            {navButton("Usuarios activos", "/administracion/usuarios")}
+            {navButton(
+              "Usuarios inactivos",
+              "/administracion/usuarios-inactivos",
+            )}
+            {navButton("Roles", "/administracion/roles")}
+            {navButton("Permisos", "/administracion/permisos")}
+            {navButton("Clientes", "/administracion/clientes")}
+          </nav>
+
+          <p className="px-4 pb-3 pt-7 text-[10px] font-semibold uppercase tracking-[0.2em] theme-text-muted">
+            Otros microservicios
+          </p>
+
+          <nav className="space-y-1">
+            {navButton("Productos", "/administracion/productos")}
+            {navButton("Categorías", "/administracion/categorias")}
+
+            {["Inventario", "Ventas", "Notificaciones"].map((item) => (
+              <span
+                key={item}
+                className="flex justify-between rounded-xl px-4 py-3 text-sm theme-text-soft"
+              >
+                <span>{item}</span>
+                <span className="text-xs theme-text-muted">Próximo</span>
+              </span>
+            ))}
+          </nav>
+
+          <p className="px-4 pb-3 pt-7 text-[10px] font-semibold uppercase tracking-[0.2em] theme-text-muted">
+            Análisis e IA
+          </p>
+
+          <nav className="space-y-1">
+            {navButton("Entrenamiento", "/analisis/entrenamiento")}
+            {navButton("Detección", "/analisis/deteccion")}
+          </nav>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+export default AdministrationSidebar;

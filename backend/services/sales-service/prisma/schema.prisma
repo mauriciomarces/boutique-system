@@ -14,8 +14,8 @@ model clientes {
   telefono       String?  @db.VarChar(30)
   correo         String?  @db.VarChar(150)
   estado         String   @default("ACTIVO") @db.VarChar(20)
-  creado_en      DateTime @db.DateTime(0)
-  actualizado_en DateTime @db.DateTime(0)
+  creado_en      DateTime @default(now()) @db.DateTime(0)
+  actualizado_en DateTime @updatedAt @db.DateTime(0)
   ventas         ventas[]
 }
 
