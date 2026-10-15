@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { clearAuthSession } from "../services/session";
+import LogoutButton from "../components/LogoutButton";
 
 import {
   getCurrentUser,
-  logout,
   refreshAccessToken,
 } from "../services/authApi";
 import type { AuthUser } from "../types/auth.types";
@@ -40,7 +41,7 @@ function AccountPage() {
         );
       } catch {
         if (!refreshToken) {
-          localStorage.clear();
+          clearAuthSession();
           navigate("/login", { replace: true });
           return;
         }
@@ -65,7 +66,7 @@ function AccountPage() {
             JSON.stringify(currentUser),
           );
         } catch {
-          localStorage.clear();
+          clearAuthSession();
           navigate("/login", { replace: true });
         }
       } finally {
@@ -75,24 +76,6 @@ function AccountPage() {
 
     void loadUser();
   }, [navigate]);
-
-  const handleLogout = async () => {
-    const refreshToken = localStorage.getItem(
-      "sposabella_refresh_token",
-    );
-
-    try {
-      if (refreshToken) {
-        await logout(refreshToken);
-      }
-    } finally {
-      localStorage.removeItem("sposabella_access_token");
-      localStorage.removeItem("sposabella_refresh_token");
-      localStorage.removeItem("sposabella_user");
-
-      navigate("/login", { replace: true });
-    }
-  };
 
   if (loading) {
     return (
@@ -121,20 +104,7 @@ function AccountPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="
-              rounded-xl
-              border theme-border
-              px-4 py-2.5
-              text-sm font-semibold theme-text
-              transition-colors
-              hover:bg-[var(--bg-secondary)]
-            "
-          >
-            Cerrar sesión
-          </button>
+<LogoutButton />
         </div>
       </header>
 

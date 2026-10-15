@@ -5,7 +5,7 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
-
+import LogoutButton from "../../auth/components/LogoutButton";
 import type {
   Category,
   Product,
@@ -245,12 +245,10 @@ function ProductsPage() {
               Categorías
             </Link>
 
-            <Link
-              to="/administracion"
-              className="rounded-xl border theme-border px-4 py-2 text-sm font-semibold theme-text"
-            >
+            <Link to="/administracion" className="rounded-xl border theme-border px-4 py-2 text-sm font-semibold theme-text">
               Administración
             </Link>
+            <LogoutButton />
           </div>
         </div>
       </header>
@@ -564,6 +562,7 @@ function ProductsPage() {
 }
 
 export default ProductsPage;
+
 
 
 

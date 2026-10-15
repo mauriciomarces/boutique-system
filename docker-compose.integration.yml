@@ -1,0 +1,131 @@
+services:
+  mysql-sales:
+    image: mysql:8.4.11
+    container_name: boutique-annulment-it-mysql-sales
+    profiles: ["integration"]
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: ${INTEGRATION_MYSQL_APP_PASSWORD:?Set a test-only password matching the current sales adapter}
+      MYSQL_DATABASE: boutique_sales
+      MYSQL_ROOT_PASSWORD: ${INTEGRATION_MYSQL_ROOT_PASSWORD:?Set a test-only root password}
+    volumes:
+      - sales-test-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      integration-net:
+        aliases:
+          - mysql-sales
+
+  mysql-inventory:
+    image: mysql:8.4.11
+    container_name: boutique-annulment-it-mysql-inventory
+    profiles: ["integration"]
+    environment:
+      MYSQL_USER: boutique
+      MYSQL_PASSWORD: ${INTEGRATION_MYSQL_APP_PASSWORD:?Set a test-only password matching the current inventory adapter}
+      MYSQL_DATABASE: boutique_inventory
+      MYSQL_ROOT_PASSWORD: ${INTEGRATION_MYSQL_ROOT_PASSWORD:?Set a test-only root password}
+    volumes:
+      - inventory-test-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      integration-net:
+        aliases:
+          - mysql-inventory
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: inventory-service
+    container_name: boutique-annulment-it-inventory-service
+    profiles: ["integration"]
+    environment:
+      PORT: 4004
+      USERS_SERVICE_URL: http://users-service:4002
+      INTERNAL_SERVICE_SECRET: ${INTEGRATION_INTERNAL_SERVICE_SECRET:?Set an isolated test authentication secret}
+      SALES_INVENTORY_INTERNAL_SECRET: ${SALES_INVENTORY_INTERNAL_SECRET:?Set one temporary value shared by both test services}
+      DATABASE_URL: ${INTEGRATION_INVENTORY_DATABASE_URL:?Set the test-only inventory Prisma URL}
+    depends_on:
+      mysql-inventory:
+        condition: service_healthy
+    networks:
+      - integration-net
+
+  integration-auth:
+    image: node:22-alpine
+    container_name: boutique-annulment-it-auth
+    profiles: ["integration"]
+    command: ["node", "/app/integration-auth-stub.js"]
+    environment:
+      PORT: 4010
+      INTEGRATION_INTERNAL_SERVICE_SECRET: ${INTEGRATION_INTERNAL_SERVICE_SECRET:?Set an isolated test authentication secret}
+    volumes:
+      - ./backend/services/sales-service/test/integration-auth-stub.js:/app/integration-auth-stub.js:ro
+    networks:
+      integration-net:
+        aliases:
+          - users-service
+
+  integration-inventory-proxy:
+    image: node:22-alpine
+    container_name: boutique-annulment-it-inventory-proxy
+    profiles: ["integration"]
+    command: ["node", "/app/integration-inventory-proxy.js"]
+    environment:
+      PORT: 4011
+      INVENTORY_SERVICE_URL: http://inventory-service:4004
+      INTEGRATION_INTERNAL_SERVICE_SECRET: ${INTEGRATION_INTERNAL_SERVICE_SECRET:?Set an isolated test authentication secret}
+    volumes:
+      - ./backend/services/sales-service/test/integration-inventory-proxy.js:/app/integration-inventory-proxy.js:ro
+    depends_on:
+      inventory-service:
+        condition: service_started
+    networks:
+      integration-net:
+        aliases:
+          - inventory-proxy
+
+  sales-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.service
+      args:
+        SERVICE_NAME: sales-service
+    container_name: boutique-annulment-it-sales-service
+    profiles: ["integration"]
+    environment:
+      PORT: 4005
+      USERS_SERVICE_URL: http://users-service:4010
+      INVENTORY_SERVICE_URL: http://inventory-proxy:4011
+      INVENTORY_REQUEST_TIMEOUT_MS: 750
+      INTERNAL_SERVICE_SECRET: ${INTEGRATION_INTERNAL_SERVICE_SECRET:?Set an isolated test authentication secret}
+      SALES_INVENTORY_INTERNAL_SECRET: ${SALES_INVENTORY_INTERNAL_SECRET:?Set one temporary value shared by both test services}
+      DATABASE_URL: ${INTEGRATION_SALES_DATABASE_URL:?Set the test-only sales Prisma URL}
+      INTEGRATION_INVENTORY_DATABASE_URL: ${INTEGRATION_INVENTORY_DATABASE_URL:?Set the test-only inventory Prisma URL}
+    depends_on:
+      mysql-sales:
+        condition: service_healthy
+      inventory-service:
+        condition: service_started
+    networks:
+      - integration-net
+
+volumes:
+  sales-test-data:
+    name: boutique-annulment-it-sales-test-data
+  inventory-test-data:
+    name: boutique-annulment-it-inventory-test-data
+
+networks:
+  integration-net:
+    internal: true

@@ -67,7 +67,8 @@ services:
     environment:
       PORT: 4002
       NODE_ENV: development
-      JWT_ACCESS_SECRET: change-this-development-secret
+      JWT_ACCESS_SECRET: &jwt_access_secret change-this-development-secret
+      INTERNAL_SERVICE_SECRET: &internal_service_secret ${INTERNAL_SERVICE_SECRET:-change-this-internal-dev-secret}
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN_DAYS: 7
       DATABASE_URL: mysql://boutique:secret@mysql-users:3306/boutique_users
@@ -114,6 +115,9 @@ services:
     restart: unless-stopped
     environment:
       PORT: 4004
+      USERS_SERVICE_URL: http://users-service:4002
+      INTERNAL_SERVICE_SECRET: *internal_service_secret
+      SALES_INVENTORY_INTERNAL_SECRET: &sales_inventory_internal_secret "${SALES_INVENTORY_INTERNAL_SECRET:?Configure SALES_INVENTORY_INTERNAL_SECRET in .env}"
       DATABASE_URL: mysql://boutique:secret@mysql-inventory:3306/boutique_inventory
     ports:
       - "4004:4004"
@@ -133,6 +137,9 @@ services:
     restart: unless-stopped
     environment:
       PORT: 4005
+      USERS_SERVICE_URL: http://users-service:4002
+      INTERNAL_SERVICE_SECRET: *internal_service_secret
+      SALES_INVENTORY_INTERNAL_SECRET: *sales_inventory_internal_secret
       DATABASE_URL: mysql://boutique:secret@mysql-sales:3306/boutique_sales
     ports:
       - "4005:4005"
@@ -370,4 +377,3 @@ volumes:
   notifications-db-data:
   ai-db-data:
   frontend-node-modules:
-

@@ -1,8 +1,9 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
+const registrarRutasVentas = require('./ventas.routes');
 
 const app = express();
 
@@ -52,7 +53,7 @@ function normalizeClientText(value, fieldName, maxLength = 100) {
 
   if (!/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u.test(text)) {
     throw new Error(
-      `${fieldName} solo puede contener letras, espacios, apÃ³strofes y guiones`,
+      `${fieldName} solo puede contener letras, espacios, apóstrofes y guiones`,
     );
   }
 
@@ -68,7 +69,7 @@ function normalizeClientPhone(value) {
 
   if (!/^\d{8,9}$/.test(phone)) {
     throw new Error(
-      'El telÃ©fono debe contener entre 8 y 9 dÃ­gitos',
+      'El teléfono debe contener entre 8 y 9 dí­gitos',
     );
   }
 
@@ -89,7 +90,7 @@ function normalizeClientEmail(value) {
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new Error('El correo electrÃ³nico no tiene un formato vÃ¡lido');
+    throw new Error('El correo electrónico no tiene un formato válido');
   }
 
   return email;
@@ -117,6 +118,174 @@ app.get('/', (req, res) => {
     service: 'sales-service',
     message: 'Microservice ready',
   });
+});
+
+
+app.use(async (req, res, next) => {
+  const method = req.method.toUpperCase();
+  const path = req.path;
+  let permission = null;
+
+  // Seguimiento de una anulación persistente.
+  if (
+    ['GET', 'HEAD'].includes(method) &&
+    /^\/ventas\/[^/]+\/anulacion\/?$/.test(path)
+  ) {
+    permission = 'VENTAS_LEER';
+  }
+
+  // Reintento de una anulación persistente.
+  else if (
+    method === 'POST' &&
+    /^\/ventas\/[^/]+\/anulacion\/reintentar\/?$/.test(path)
+  ) {
+    permission = 'VENTAS_EDITAR';
+  }
+  // Consultas de ventas y pagos.
+  else if (
+    ['GET', 'HEAD'].includes(method) &&
+    (
+      /^\/ventas\/?$/.test(path) ||
+      /^\/ventas\/[^/]+$/.test(path) ||
+      /^\/pagos\/?$/.test(path)
+    )
+  ) {
+    permission = 'VENTAS_LEER';
+  }
+
+  // Crear ventas.
+  else if (
+    method === 'POST' &&
+    /^\/ventas\/?$/.test(path)
+  ) {
+    permission = 'VENTAS_CREAR';
+  }
+
+  // Cambiar el estado de una venta.
+  else if (
+    method === 'PATCH' &&
+    /^\/ventas\/[^/]+\/estado\/?$/.test(path)
+  ) {
+    permission = 'VENTAS_EDITAR';
+  }
+
+  // Consultar clientes.
+  else if (
+    ['GET', 'HEAD'].includes(method) &&
+    (
+      /^\/clientes\/?$/.test(path) ||
+      /^\/clientes\/[^/]+$/.test(path)
+    )
+  ) {
+    permission = 'CLIENTES_LEER';
+  }
+
+  // Crear clientes.
+  else if (
+    method === 'POST' &&
+    /^\/clientes\/?$/.test(path)
+  ) {
+    permission = 'CLIENTES_CREAR';
+  }
+
+  // Editar datos de un cliente.
+  else if (
+    method === 'PUT' &&
+    /^\/clientes\/[^/]+$/.test(path)
+  ) {
+    permission = 'CLIENTES_EDITAR';
+  }
+
+  // Cambiar el estado de un cliente.
+  else if (
+    method === 'PATCH' &&
+    /^\/clientes\/[^/]+\/estado\/?$/.test(path)
+  ) {
+    permission = 'CLIENTES_CAMBIAR_ESTADO';
+  }
+
+  // Registrar pagos.
+  else if (
+    method === 'POST' &&
+    /^\/pagos\/?$/.test(path)
+  ) {
+    permission = 'VENTAS_CREAR';
+  }
+
+  // No interceptar rutas ajenas a ventas, clientes y pagos.
+  if (!permission) {
+    const esRutaComercial = /^\/(ventas|clientes|pagos)(?:\/|$)/.test(path);
+
+    if (!esRutaComercial) {
+      return next();
+    }
+
+    // Dentro de las rutas comerciales, los métodos u operaciones
+    // no contemplados deben permanecer bloqueados.
+    return res.status(403).json({
+      error: 'Operación no autorizada para este servicio',
+    });
+  }
+
+  const authorization = req.get('authorization');
+
+  if (!authorization || !/^Bearer\s+\S+$/i.test(authorization)) {
+    return res.status(401).json({
+      error: 'Se requiere un token Bearer válido',
+    });
+  }
+
+  const usersServiceUrl = process.env.USERS_SERVICE_URL;
+  const internalSecret = process.env.INTERNAL_SERVICE_SECRET;
+
+  if (!usersServiceUrl || !internalSecret) {
+    console.error('Falta la configuración de autenticación');
+
+    return res.status(503).json({
+      error: 'El servicio de autenticación no está disponible',
+    });
+  }
+
+  try {
+    const response = await fetch(
+      `${usersServiceUrl.replace(/\/+$/, '')}/internal/auth/validate`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authorization,
+          'x-internal-service-key': internalSecret,
+        },
+        body: JSON.stringify({ permission }),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok || result.valid !== true) {
+      if (response.status === 401 || response.status === 403) {
+        return res.status(response.status).json({
+          error: result.error || 'No tienes permiso para esta operación',
+        });
+      }
+
+      return res.status(503).json({
+        error: 'No se pudo validar la autorización',
+      });
+    }
+
+    req.authenticatedUser = result.user;
+    req.requiredPermission = permission;
+
+    return next();
+  } catch (error) {
+    console.error('Error al validar autorización:', error);
+
+    return res.status(503).json({
+      error: 'El servicio de autenticación no está disponible',
+    });
+  }
 });
 
 app.get('/ventas', async (req, res) => {
@@ -291,7 +460,7 @@ app.patch('/clientes/:id/estado', async (req, res) => {
 
     if (!['ACTIVO', 'INACTIVO'].includes(estado)) {
       return res.status(400).json({
-        error: 'Estado invÃ¡lido',
+        error: 'Estado inválido',
       });
     }
 
@@ -340,6 +509,8 @@ app.get('/pagos', async (req, res) => {
   }
 });
 
+registrarRutasVentas(app, prisma);
+
 app.listen(port, () => {
   console.log(`sales-service running on port ${port}`);
 });
@@ -353,5 +524,3 @@ process.on('SIGTERM', async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
-
-

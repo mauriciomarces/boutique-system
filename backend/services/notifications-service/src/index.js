@@ -377,17 +377,102 @@ app.post(
 app.get('/notificaciones', authenticateToken, async (req, res) => {
   try {
     const usuarioId = BigInt(req.auth.sub);
+
     const notificaciones = await prisma.notificaciones.findMany({
       where: { usuario_id: usuarioId },
       orderBy: { creado_en: 'desc' },
     });
 
-    res.json(notificaciones);
-  } catch (error) {
-    console.error('[notifications-service][DATABASE_ERROR] Error al consultar notificaciones:', error.message || error);
+    const resultado = notificaciones.map((item) => ({
+      ...item,
+      id: item.id.toString(),
+      usuario_id: item.usuario_id.toString(),
+      referencia_id:
+        item.referencia_id === null ? null : item.referencia_id.toString(),
+    }));
 
-    res.status(500).json({
+    return res.json(resultado);
+  } catch (error) {
+    console.error(
+      '[notifications-service][DATABASE_ERROR] Error al consultar notificaciones:',
+      error.message || error,
+    );
+
+    return res.status(500).json({
       error: 'No se pudieron consultar las notificaciones',
+    });
+  }
+});
+
+app.patch('/notificaciones/:id/leida', authenticateToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!/^[1-9]\d*$/.test(id)) {
+      return res.status(400).json({
+        error: 'El identificador de la notificación no es válido',
+      });
+    }
+
+    const usuarioId = BigInt(req.auth.sub);
+    const notificacionId = BigInt(id);
+
+    const existente = await prisma.notificaciones.findFirst({
+      where: {
+        id: notificacionId,
+        usuario_id: usuarioId,
+      },
+    });
+
+    if (!existente) {
+      return res.status(404).json({
+        error: 'No se encontró la notificación solicitada',
+      });
+    }
+
+    if (existente.leido_en === null) {
+      await prisma.notificaciones.updateMany({
+        where: {
+          id: notificacionId,
+          usuario_id: usuarioId,
+          leido_en: null,
+        },
+        data: {
+          leido_en: new Date(),
+        },
+      });
+    }
+
+    const actualizada = await prisma.notificaciones.findFirst({
+      where: {
+        id: notificacionId,
+        usuario_id: usuarioId,
+      },
+    });
+
+    if (!actualizada) {
+      return res.status(404).json({
+        error: 'No se encontró la notificación solicitada',
+      });
+    }
+
+    return res.json({
+      ...actualizada,
+      id: actualizada.id.toString(),
+      usuario_id: actualizada.usuario_id.toString(),
+      referencia_id:
+        actualizada.referencia_id === null
+          ? null
+          : actualizada.referencia_id.toString(),
+    });
+  } catch (error) {
+    console.error(
+      '[notifications-service][DATABASE_ERROR] Error al marcar notificación como leída:',
+      error.message || error,
+    );
+
+    return res.status(500).json({
+      error: 'No se pudo marcar la notificación como leída',
     });
   }
 });

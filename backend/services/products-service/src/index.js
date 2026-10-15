@@ -1,8 +1,9 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
+const registrarRutasVariantes = require('./variantes.routes');
 
 const app = express();
 
@@ -59,7 +60,7 @@ app.get('/categorias', async (req, res) => {
 
     return res.json(categorias);
   } catch (error) {
-    console.error('Error al consultar categorías:', error);
+    console.error('Error al consultar categorí­as:', error);
 
     return res.status(500).json({
       error: 'No se pudieron consultar las categorías',
@@ -575,6 +576,8 @@ app.patch('/productos/:id/estado', async (req, res) => {
 
 
 
+registrarRutasVariantes(app, prisma);
+
 app.listen(port, () => {
   console.log(`products-service running on port ${port}`);
 });
@@ -588,3 +591,4 @@ process.on('SIGTERM', async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
+

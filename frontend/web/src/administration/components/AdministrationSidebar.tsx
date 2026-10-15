@@ -1,4 +1,4 @@
-﻿import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 type AdministrationSidebarProps = {
   sidebarOpen: boolean;
@@ -52,9 +52,9 @@ function AdministrationSidebar({
       <aside
         className={`${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } fixed inset-y-0 left-0 z-50 w-72 border-r theme-border bg-[var(--bg)] p-4 pt-24 shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:block lg:w-64 lg:translate-x-0 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}
+        } fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto overscroll-contain border-r theme-border bg-[var(--bg)] p-4 pt-24 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-transform duration-300 lg:sticky lg:top-0 lg:z-auto lg:block lg:h-[100dvh] lg:max-h-[100dvh] lg:w-64 lg:shrink-0 lg:translate-x-0 lg:overflow-y-auto lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}
       >
-        <div className="glass soft-shadow rounded-2xl p-4 lg:sticky lg:top-6">
+        <div className="glass soft-shadow min-h-full rounded-2xl p-4">
           <p className="px-4 pb-3 text-[10px] font-semibold uppercase tracking-[0.2em] theme-text-muted">
             Usuarios y acceso
           </p>
@@ -78,15 +78,11 @@ function AdministrationSidebar({
             {navButton("Productos", "/administracion/productos")}
             {navButton("Categorías", "/administracion/categorias")}
 
-            {["Inventario", "Ventas", "Notificaciones"].map((item) => (
-              <span
-                key={item}
-                className="flex justify-between rounded-xl px-4 py-3 text-sm theme-text-soft"
-              >
-                <span>{item}</span>
-                <span className="text-xs theme-text-muted">Próximo</span>
-              </span>
-            ))}
+            {navButton("Inventario", "/administracion/inventario")}
+
+            {navButton("Ventas", "/administracion/ventas")}
+
+            {navButton("Notificaciones", "/administracion/notificaciones")}
           </nav>
 
           <p className="px-4 pb-3 pt-7 text-[10px] font-semibold uppercase tracking-[0.2em] theme-text-muted">
@@ -104,3 +100,4 @@ function AdministrationSidebar({
 }
 
 export default AdministrationSidebar;
+

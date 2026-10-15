@@ -52,6 +52,7 @@ model movimientos_inventario {
   referencia_tipo      String?  @db.VarChar(30)
   referencia_id        BigInt?
   motivo               String?  @db.VarChar(255)
+  idempotency_key String? @unique(map: "uq_movimientos_idempotency_key") @db.VarChar(191)
   creado_en            DateTime @db.DateTime(0)
 }
 

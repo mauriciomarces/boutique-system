@@ -227,3 +227,7 @@ Los servicios no deben acceder directamente a las bases de datos pertenecientes 
 La autenticación se encuentra integrada en `users-service` y no constituye un microservicio independiente.
 
 La infraestructura de desarrollo y ejecución se administra mediante Docker Compose.
+
+## Anulación persistente de ventas
+
+La anulación con reversión idempotente de existencias, los contratos HTTP, la recuperación manual y los pasos de base de datos pendientes están documentados en [backend/services/sales-service/README.md](./backend/services/sales-service/README.md).

@@ -151,6 +151,10 @@ async function ensureRoleSeed() {
     'VENTAS_LEER',
     'VENTAS_CREAR',
     'VENTAS_EDITAR',
+    'CLIENTES_LEER',
+    'CLIENTES_CREAR',
+    'CLIENTES_EDITAR',
+    'CLIENTES_CAMBIAR_ESTADO',
     'NOTIFICACIONES_LEER',
   ];
 
@@ -2959,6 +2963,114 @@ async function bootstrap() {
   const { adminRole } = await ensureRoleSeed();
   await ensureAdminUser(adminRole);
 
+  app.post('/internal/auth/validate', async (req, res) => {
+    const expectedSecret = process.env.INTERNAL_SERVICE_SECRET;
+    const providedSecret = req.get('x-internal-service-key');
+
+    if (!expectedSecret) {
+      return res.status(503).json({
+        error: 'La validación interna no está configurada',
+      });
+    }
+
+    if (
+      typeof providedSecret !== 'string' ||
+      Buffer.byteLength(providedSecret) !== Buffer.byteLength(expectedSecret) ||
+      !crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(expectedSecret))
+    ) {
+      return res.status(401).json({ error: 'Credencial interna inválida' });
+    }
+
+    const authorization = req.get('authorization');
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Token de acceso requerido' });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(authorization.substring(7), ACCESS_SECRET, {
+        algorithms: ['HS256'],
+      });
+    } catch {
+      return res.status(401).json({ error: 'Token inválido o expirado' });
+    }
+
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      typeof payload.sub !== 'string' ||
+      !/^[1-9]\d*$/.test(payload.sub) ||
+      typeof payload.exp !== 'number' ||
+      !Number.isFinite(payload.exp) ||
+      payload.exp <= Math.floor(Date.now() / 1000)
+    ) {
+      return res.status(401).json({
+        error: 'El token no contiene sub y exp válidos',
+      });
+    }
+
+    const permission = req.body?.permission;
+    if (typeof permission !== 'string' || !permission.trim()) {
+      return res.status(400).json({
+        error: 'Debe especificarse el permiso requerido',
+      });
+    }
+
+    try {
+      const usuario = await prisma.usuarios.findUnique({
+        where: { id: BigInt(payload.sub) },
+        select: {
+          id: true,
+          estado: true,
+          usuario_rol: {
+            select: {
+              roles: {
+                select: {
+                  estado: true,
+                  rol_permiso: {
+                    select: {
+                      permisos: { select: { nombre: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!usuario) {
+        return res.status(401).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (usuario.estado !== 'ACTIVO') {
+        return res.status(403).json({ error: 'El usuario se encuentra inactivo' });
+      }
+
+      const tienePermiso = usuario.usuario_rol.some(({ roles }) =>
+        roles.estado === 'ACTIVO' &&
+        roles.rol_permiso.some(({ permisos }) => permisos.nombre === permission)
+      );
+
+      if (!tienePermiso) {
+        return res.status(403).json({
+          error: 'No tiene permisos para realizar esta operación',
+          permiso_requerido: permission,
+        });
+      }
+
+      return res.status(200).json({
+        valid: true,
+        user: { id: usuario.id.toString() },
+        permission,
+      });
+    } catch (error) {
+      console.error('Error en la validación interna:', error);
+      return res.status(500).json({
+        error: 'No se pudo verificar la autorización',
+      });
+    }
+  });
   app.listen(port, () => {
     console.log(
       `users-service running on port ${port}`

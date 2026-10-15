@@ -1,7 +1,8 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, KeyboardEvent, ClipboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import LogoutButton from "../../auth/components/LogoutButton";
 
 declare global {
   namespace JSX {
@@ -648,16 +649,7 @@ function AdminUsersPage() {
                 : "Administrador"}
             </span>
 
-            <button
-              type="button"
-              onClick={() => {
-                localStorage.clear();
-                navigate("/login", { replace: true });
-              }}
-              className="rounded-full border theme-border px-4 py-2 text-sm font-semibold theme-text"
-            >
-              Cerrar sesión
-            </button>
+<LogoutButton />
           </div>
         </div>
       </header>

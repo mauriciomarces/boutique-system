@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+﻿import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import LogoutButton from "../../auth/components/LogoutButton";
 
 interface AnalysisLayoutProps {
   title: string;
@@ -29,17 +30,19 @@ function AnalysisLayout({
             </p>
 
             <p className="mt-0.5 text-[9px] uppercase tracking-[0.2em] theme-text-muted">
-              Análisis experimental
+              AnÃ¡lisis experimental
             </p>
           </Link>
 
+          <div className="flex items-center gap-3">
+            <LogoutButton />
           <button
             type="button"
             onClick={() =>
               setSidebarOpen((value) => !value)
             }
             className="flex h-10 w-10 items-center justify-center rounded-xl border theme-border bg-[var(--bg)] theme-text shadow-lg lg:hidden"
-            aria-label="Abrir menú"
+            aria-label="Abrir menÃº"
           >
             <span className="flex flex-col gap-1.5">
               <span className="block h-0.5 w-5 rounded-full bg-current" />
@@ -47,6 +50,7 @@ function AnalysisLayout({
               <span className="block h-0.5 w-5 rounded-full bg-current" />
             </span>
           </button>
+          </div>
         </div>
       </header>
 
