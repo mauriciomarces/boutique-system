@@ -25,11 +25,15 @@ import AccountPage from "./auth/pages/AccountPage";
 import AdminUsersPage from "./admin/pages/AdminUsersPage";
 import ErrorPage from "./components/ErrorPage";
 import AccountActivationPage from "./auth/pages/AccountActivationPage";
+import RequireAuth from "./auth/components/RequireAuth";
+import SessionMonitor from "./auth/components/SessionMonitor";
 
 import ClientsPage from "./clients/pages/ClientsPage";
 import ProductsPage from "./products/pages/ProductsPage";
 import CategoriesPage from "./products/pages/CategoriesPage";
-
+import SalesPage from "./sales/pages/SalesPage";
+import InventoryPage from "./inventory/pages/InventoryPage";
+import NotificationsPage from "./notifications/pages/NotificationsPage";
 import TrainingDashboardPage from "./analysis/pages/TrainingDashboardPage";
 import TrainingDetailPage from "./analysis/pages/TrainingDetailPage";
 import DetectionPage from "./analysis/pages/DetectionPage";
@@ -46,8 +50,7 @@ function LandingPage({
       <Navbar
         darkMode={darkMode}
         setDarkMode={setDarkMode}
-      />
-
+        />
       <main>
         <section id="inicio">
           <Hero />
@@ -104,6 +107,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <SessionMonitor />
       <Routes>
         <Route
           path="/"
@@ -111,130 +115,117 @@ function App() {
             <LandingPage
               darkMode={darkMode}
               setDarkMode={setDarkMode}
-            />
+        />
           }
         />
-
         <Route
           path="/login"
           element={<LoginPage />}
         />
-
         <Route
           path="/registro"
           element={<RegisterPage />}
         />
-
         <Route
           path="/verificar-correo"
           element={<VerifyEmailPage />}
         />
-
         <Route
           path="/recuperar-contrasena"
           element={<ForgotPasswordPage />}
         />
-
         <Route
           path="/restablecer-contrasena"
           element={<ResetPasswordPage />}
         />
-
         <Route
           path="/activacion-cuenta"
           element={<AccountActivationPage />}
         />
-
         <Route
           path="/cuenta"
-          element={<AccountPage />}
+          element={<RequireAuth><AccountPage /></RequireAuth>}
         />
-
         <Route
           path="/admin/usuarios"
-          element={<AdminUsersPage />}
+          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
         />
-
         <Route
           path="/administracion"
-          element={<AdminUsersPage />}
+          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
         />
-
         <Route
           path="/administracion/usuarios"
-          element={<AdminUsersPage />}
+          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
         />
-
         <Route
           path="/administracion/usuarios-inactivos"
-          element={<AdminUsersPage />}
+          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
         />
-
         <Route
           path="/administracion/roles"
-          element={<AdminUsersPage />}
+          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
         />
-
         <Route
           path="/administracion/permisos"
-          element={<AdminUsersPage />}
+          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
         />
-
         <Route
           path="/administracion/clientes"
-          element={<ClientsPage />}
+          element={<RequireAuth><ClientsPage /></RequireAuth>}
         />
-
         <Route
           path="/administracion/productos"
-          element={<ProductsPage />}
+          element={<RequireAuth><ProductsPage /></RequireAuth>}
         />
-
         <Route
           path="/administracion/categorias"
-          element={<CategoriesPage />}
+          element={<RequireAuth><CategoriesPage /></RequireAuth>}
         />
-
+        <Route
+          path="/administracion/ventas"
+          element={<RequireAuth><SalesPage /></RequireAuth>}
+        />
+        <Route
+          path="/administracion/inventario"
+          element={<RequireAuth><InventoryPage /></RequireAuth>}
+        />
+        <Route
+          path="/administracion/notificaciones"
+          element={<RequireAuth><NotificationsPage /></RequireAuth>}
+        />
         <Route
           path="/analisis/entrenamiento"
-          element={<TrainingDashboardPage />}
+          element={<RequireAuth><TrainingDashboardPage /></RequireAuth>}
         />
-
         <Route
           path="/analisis/entrenamiento/:id"
-          element={<TrainingDetailPage />}
+          element={<RequireAuth><TrainingDetailPage /></RequireAuth>}
         />
-
         <Route
           path="/analisis/deteccion"
-          element={<DetectionPage />}
+          element={<RequireAuth><DetectionPage /></RequireAuth>}
         />
-
         <Route
           path="/error/400"
           element={<ErrorPage code={400} />}
         />
-
         <Route
           path="/error/401"
           element={<ErrorPage code={401} />}
         />
-
         <Route
           path="/error/403"
           element={<ErrorPage code={403} />}
         />
-
         <Route
           path="/error/404"
           element={<ErrorPage code={404} />}
         />
-
         <Route
           path="/error/500"
           element={<ErrorPage code={500} />}
         />
-
         <Route
           path="*"
           element={<ErrorPage code={404} />}
@@ -245,3 +236,5 @@ function App() {
 }
 
 export default App;
+
+

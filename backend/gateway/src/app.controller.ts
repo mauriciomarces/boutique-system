@@ -1,15 +1,19 @@
-﻿import {
+import {
   Body,
   Controller,
   Delete,
   Get,
   Headers,
+  HttpCode,
+  BadGatewayException,
   Param,
   Patch,
   Post,
   Put,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { AppService } from './app.service';
 import { MicroservicesService } from './microservices.service';
@@ -188,43 +192,412 @@ export class AppController {
   }
 
   // =========================================================
-  // OTHER MICROSERVICES
+  // INVENTARIO
   // =========================================================
 
-
   @Get('api/inventory')
-  getInventory() {
+  getInventory(
+    @Query('stock_bajo') stockBajo?: string,
+    @Query('variante_producto_id') varianteProductoId?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const params = new URLSearchParams();
+
+    if (stockBajo) {
+      params.set('stock_bajo', stockBajo);
+    }
+
+    if (varianteProductoId) {
+      params.set('variante_producto_id', varianteProductoId);
+    }
+
+    const query = params.toString();
+
     return this.microservicesService.get(
-      'http://inventory-service:4004/existencias',
+      `http://inventory-service:4004/existencias${query ? `?${query}` : ''}`,
+      this.getForwardedHeaders(authorization),
     );
   }
 
-  @Get('api/sales')
-  getSales() {
+  @Get('api/inventory/movimientos')
+  getInventoryMovements(
+    @Query('variante_producto_id') varianteProductoId?: string,
+    @Query('tipo_movimiento') tipoMovimiento?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const params = new URLSearchParams();
+
+    if (varianteProductoId) {
+      params.set('variante_producto_id', varianteProductoId);
+    }
+
+    if (tipoMovimiento) {
+      params.set('tipo_movimiento', tipoMovimiento);
+    }
+
+    const query = params.toString();
+
+    return this.microservicesService.get(
+      `http://inventory-service:4004/movimientos${query ? `?${query}` : ''}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/inventory/:id')
+  getInventoryItem(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://inventory-service:4004/existencias/${id}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/inventory')
+  createInventoryItem(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://inventory-service:4004/existencias',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Put('api/inventory/:id')
+  updateInventoryItem(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.put(
+      `http://inventory-service:4004/existencias/${id}`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  // =========================================================
+  // MOVIMIENTOS DE INVENTARIO
+  // =========================================================
+
+  @Post('api/inventory/movimientos')
+  createInventoryMovement(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://inventory-service:4004/movimientos',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  // =========================================================
+  // PROVEEDORES
+  // =========================================================
+
+  @Get('api/proveedores')
+  getProveedores(
+    @Headers('authorization') authorization?: string,
+    @Query('buscar') buscar?: string,
+    @Query('estado') estado?: string,
+  ) {
+    const params = new URLSearchParams();
+
+    if (buscar) {
+      params.set('buscar', buscar);
+    }
+
+    if (estado) {
+      params.set('estado', estado);
+    }
+
+    const query = params.toString();
+
+    return this.microservicesService.get(
+      `http://inventory-service:4004/proveedores${query ? `?${query}` : ''}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/proveedores/:id')
+  getProveedor(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://inventory-service:4004/proveedores/${id}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/proveedores')
+  createProveedor(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://inventory-service:4004/proveedores',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Put('api/proveedores/:id')
+  updateProveedor(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.put(
+      `http://inventory-service:4004/proveedores/${id}`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Patch('api/proveedores/:id/estado')
+  changeProveedorStatus(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.patch(
+      `http://inventory-service:4004/proveedores/${id}/estado`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  // =========================================================
+  // COMPRAS
+  // =========================================================
+
+  @Get('api/compras')
+  getCompras(
+    @Query('proveedor_id') proveedorId?: string,
+    @Query('estado') estado?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const params = new URLSearchParams();
+
+    if (proveedorId) {
+      params.set('proveedor_id', proveedorId);
+    }
+
+    if (estado) {
+      params.set('estado', estado);
+    }
+
+    const query = params.toString();
+
+    return this.microservicesService.get(
+      `http://inventory-service:4004/compras${query ? `?${query}` : ''}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/compras/:id')
+  getCompra(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://inventory-service:4004/compras/${id}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/compras')
+  createCompra(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://inventory-service:4004/compras',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Patch('api/compras/:id/anular')
+  anularCompra(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.patch(
+      `http://inventory-service:4004/compras/${id}/anular`,
+      {},
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  // =========================================================
+  // VENTAS
+  // =========================================================
+
+  @Get('api/ventas')
+  getVentas(@Headers('authorization') authorization?: string) {
     return this.microservicesService.get(
       'http://sales-service:4005/ventas',
+      this.getForwardedHeaders(authorization),
     );
   }
 
-  @Get('api/clientes')
-  getClientes() {
+  @Get('api/ventas/:id')
+  getVenta(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.get(
-      'http://sales-service:4005/clientes',
+      `http://sales-service:4005/ventas/${id}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/ventas')
+  createVenta(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://sales-service:4005/ventas',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Patch('api/ventas/:id/estado')
+  async changeVentaStatus(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const result = await this.microservicesService.patch(
+      `http://sales-service:4005/ventas/${id}/estado`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+
+    if (
+      body &&
+      typeof body === 'object' &&
+      'estado' in body &&
+      body.estado === 'ANULADA'
+    ) {
+      if (
+        !result ||
+        typeof result !== 'object' ||
+        !('anulacion' in result) ||
+        !result.anulacion ||
+        typeof result.anulacion !== 'object' ||
+        !('estado' in result.anulacion) ||
+        typeof result.anulacion.estado !== 'string'
+      ) {
+        throw new BadGatewayException(
+          'Sales-service devolvió una respuesta de anulación no válida',
+        );
+      }
+
+      response.status(result.anulacion.estado === 'COMPLETADA' ? 200 : 202);
+    }
+
+    return result;
+  }
+
+  @Get('api/ventas/:id/anulacion')
+  getVentaAnulacion(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://sales-service:4005/ventas/${id}/anulacion`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/ventas/:id/anulacion/reintentar')
+  @HttpCode(200)
+  async retryVentaAnulacion(
+    @Param('id') id: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.microservicesService.post(
+      `http://sales-service:4005/ventas/${id}/anulacion/reintentar`,
+      {},
+      this.getForwardedHeaders(authorization),
+    );
+    if (
+      !result ||
+      typeof result !== 'object' ||
+      !('estado' in result) ||
+      typeof result.estado !== 'string'
+    ) {
+      throw new BadGatewayException(
+        'Sales-service devolvió una respuesta de anulación no válida',
+      );
+    }
+
+    response.status(result.estado === 'COMPLETADA' ? 200 : 202);
+    return result;
+  }
+
+  // =========================================================
+  // PAGOS
+  // =========================================================
+
+  @Get('api/pagos')
+  getPagos(@Headers('authorization') authorization?: string) {
+    return this.microservicesService.get(
+      'http://sales-service:4005/pagos',
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/pagos')
+  createPago(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://sales-service:4005/pagos',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+  @Get('api/clientes')
+  getClientes(@Headers('authorization') authorization?: string) {
+    return this.microservicesService.get(
+      `http://sales-service:4005/clientes`,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Get('api/clientes/:id')
-  getCliente(@Param('id') id: string) {
+  getCliente(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.get(
       `http://sales-service:4005/clientes/${id}`,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Post('api/clientes')
-  createCliente(@Body() body: unknown) {
+  createCliente(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.post(
-      'http://sales-service:4005/clientes',
+      `http://sales-service:4005/clientes`,
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
@@ -232,10 +605,12 @@ export class AppController {
   updateCliente(
     @Param('id') id: string,
     @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
   ) {
     return this.microservicesService.put(
       `http://sales-service:4005/clientes/${id}`,
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
@@ -243,96 +618,154 @@ export class AppController {
   changeClienteStatus(
     @Param('id') id: string,
     @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
   ) {
     return this.microservicesService.patch(
       `http://sales-service:4005/clientes/${id}/estado`,
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Get('api/correlation/health')
-  correlationHealth() {
+  correlationHealth(@Headers('authorization') authorization?: string) {
     return this.microservicesService.get(
       'http://logic-correlation-service:4007/health',
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Post('api/correlation/events')
-  ingestCorrelationEvent(@Body() body: unknown) {
+  ingestCorrelationEvent(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.post(
       'http://logic-correlation-service:4007/events',
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Post('api/correlation/correlations/analyze')
-  analyzeCorrelation(@Body() body: unknown) {
+  analyzeCorrelation(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.post(
       'http://logic-correlation-service:4007/correlations/analyze',
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Post('api/correlation/features/generate')
-  generateCorrelationFeatures(@Body() body: unknown) {
+  generateCorrelationFeatures(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.post(
       'http://logic-correlation-service:4007/features/generate',
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Post('api/correlation/analyze-and-classify')
-  analyzeAndClassify(@Body() body: unknown) {
+  analyzeAndClassify(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.post(
       'http://logic-correlation-service:4007/analyze-and-classify',
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Get('api/ai/health')
-  aiHealth() {
-    return this.microservicesService.get('http://ai-service:4008/health');
+  aiHealth(@Headers('authorization') authorization?: string) {
+    return this.microservicesService.get(
+      'http://ai-service:4008/health',
+      this.getForwardedHeaders(authorization),
+    );
   }
 
   @Post('api/ai/train')
-  aiTrain(@Body() body: unknown) {
-    return this.microservicesService.post('http://ai-service:4008/train', body);
+  aiTrain(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://ai-service:4008/train',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
   }
 
   @Post('api/ai/predict')
-  aiPredict(@Body() body: unknown) {
+  aiPredict(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.post(
       'http://ai-service:4008/predict',
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Get('api/ai/training')
-  aiTrainingList() {
-    return this.microservicesService.get('http://ai-service:4008/training');
+  aiTrainingList(@Headers('authorization') authorization?: string) {
+    return this.microservicesService.get(
+      'http://ai-service:4008/training',
+      this.getForwardedHeaders(authorization),
+    );
   }
 
   @Get('api/ai/training/:id')
-  aiTrainingDetail(@Param('id') id: string) {
+  aiTrainingDetail(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.get(
       `http://ai-service:4008/training/${id}`,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Get('api/ai/metrics')
-  aiMetrics() {
-    return this.microservicesService.get('http://ai-service:4008/metrics');
+  aiMetrics(@Headers('authorization') authorization?: string) {
+    return this.microservicesService.get(
+      'http://ai-service:4008/metrics',
+      this.getForwardedHeaders(authorization),
+    );
   }
 
   @Get('api/ai/model')
-  aiModel() {
-    return this.microservicesService.get('http://ai-service:4008/model');
+  aiModel(@Headers('authorization') authorization?: string) {
+    return this.microservicesService.get(
+      'http://ai-service:4008/model',
+      this.getForwardedHeaders(authorization),
+    );
   }
 
   @Get('api/notifications')
   getNotifications(@Headers('authorization') authorization?: string) {
     return this.microservicesService.get(
       'http://notifications-service:4006/notificaciones',
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Patch('api/notifications/:id/read')
+  markNotificationAsRead(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.patch(
+      `http://notifications-service:4006/notificaciones/${id}/leida`,
+      {},
       this.getForwardedHeaders(authorization),
     );
   }
@@ -510,10 +943,7 @@ export class AppController {
   }
 
   @Patch('api/categorias/:id/estado')
-  changeCategoriaStatus(
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
+  changeCategoriaStatus(@Param('id') id: string, @Body() body: unknown) {
     return this.microservicesService.patch(
       `http://products-service:4003/categorias/${id}/estado`,
       body,
@@ -557,10 +987,7 @@ export class AppController {
   }
 
   @Patch('api/productos/:id/estado')
-  changeProductoStatus(
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
+  changeProductoStatus(@Param('id') id: string, @Body() body: unknown) {
     return this.microservicesService.patch(
       `http://products-service:4003/productos/${id}/estado`,
       body,
@@ -570,9 +997,7 @@ export class AppController {
   // HELPERS
   // =========================================================
 
-  private getForwardedHeaders(
-    authorization?: string,
-  ): Record<string, string> {
+  private getForwardedHeaders(authorization?: string): Record<string, string> {
     if (!authorization) {
       return {};
     }

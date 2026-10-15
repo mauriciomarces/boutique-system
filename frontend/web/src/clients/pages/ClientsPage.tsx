@@ -6,7 +6,7 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
-
+import LogoutButton from "../../auth/components/LogoutButton";
 import type {
   Client,
   ClientForm,
@@ -265,12 +265,12 @@ function ClientsPage() {
             </Link>
           </div>
 
-          <Link
-            to="/administracion"
-            className="rounded-xl border theme-border px-4 py-2 text-sm font-semibold theme-text"
-          >
-            Administración
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link to="/administracion" className="rounded-xl border theme-border px-4 py-2 text-sm font-semibold theme-text">
+              Administración
+            </Link>
+            <LogoutButton />
+          </div>
         </div>
       </header>
 
@@ -703,4 +703,5 @@ function ClientsPage() {
 }
 
 export default ClientsPage;
+
 

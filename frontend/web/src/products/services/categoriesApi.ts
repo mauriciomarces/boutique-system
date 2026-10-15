@@ -34,7 +34,7 @@ async function request<T>(
     throw new Error(
       data?.error ||
         data?.message ||
-        "No se pudo completar la operaci�n.",
+        "No se pudo completar la operación.",
     );
   }
 

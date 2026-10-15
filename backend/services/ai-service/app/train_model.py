@@ -113,9 +113,10 @@ def train_decision_tree(
     joblib.dump(model, model_path)
     joblib.dump(model, CURRENT_MODEL_PATH)
 
-    trained_at = datetime.now(timezone.utc).isoformat()
+    training_timestamp = datetime.now(timezone.utc)
+    trained_at = training_timestamp.isoformat()
     metadata = {
-        "training_id": f"train-{model_version}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+        "training_id": f"train-{model_version}-{training_timestamp.strftime('%Y%m%dT%H%M%S%fZ')}",
         "model_version": model_version,
         "dataset_version": dataset_version,
         "fecha_entrenamiento": trained_at,
