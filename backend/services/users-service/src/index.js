@@ -7,6 +7,8 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { publishSystemEvent } = require('../../../contracts/event-publisher');
+const { verifiedActorId } = require('../../../contracts/event-actor');
 
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
@@ -472,6 +474,7 @@ async function authenticateToken(req, res, next) {
     }
 
     req.auth = payload;
+    req.authenticatedUser = { id: payload.sub };
     next();
   } catch (error) {
     return res.status(401).json({
@@ -1386,6 +1389,15 @@ app.post(
         },
       });
 
+      publishSystemEvent({
+        usuario_id: verifiedActorId(req),
+        tipo_evento: 'CAMBIO_ROL',
+        entidad: 'usuario',
+        entidad_id: usuarioId.toString(),
+        ip: req.ip,
+        metadata: { rol_id: rolId.toString(), accion: 'asignado' },
+      });
+
       return res.status(201).json(
         serializeBigInt(relacion),
       );
@@ -1453,6 +1465,15 @@ app.delete(
             rol_id: rolId,
           },
         },
+      });
+
+      publishSystemEvent({
+        usuario_id: verifiedActorId(req),
+        tipo_evento: 'CAMBIO_ROL',
+        entidad: 'usuario',
+        entidad_id: usuarioId.toString(),
+        ip: req.ip,
+        metadata: { rol_id: rolId.toString(), accion: 'removido' },
       });
 
       return res.json({
@@ -1559,6 +1580,14 @@ app.post(
       return creado;
     });
 
+    publishSystemEvent({
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'USUARIO_CREADO',
+      entidad: 'usuario',
+      entidad_id: usuario.id.toString(),
+      ip: req.ip,
+    });
+
     try {
       await sendActivationEmail({ usuarioId: usuario.id.toString(), correo: usuario.correo, token });
     } catch (error) {
@@ -1627,6 +1656,15 @@ app.put(
         creado_en: true,
         actualizado_en: true,
       },
+    });
+
+    publishSystemEvent({
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'USUARIO_MODIFICADO',
+      entidad: 'usuario',
+      entidad_id: usuario.id.toString(),
+      ip: req.ip,
+      metadata: { campos: 'perfil' },
     });
 
     res.json(
@@ -1740,6 +1778,15 @@ app.patch(
         estado: true,
         actualizado_en: true,
       },
+    });
+
+    publishSystemEvent({
+      usuario_id: verifiedActorId(req),
+      tipo_evento: estado === 'INACTIVO' ? 'USUARIO_DESACTIVADO' : 'USUARIO_MODIFICADO',
+      entidad: 'usuario',
+      entidad_id: usuario.id.toString(),
+      ip: req.ip,
+      metadata: { estado },
     });
 
     res.json(
@@ -2664,12 +2711,26 @@ app.post('/auth/login', loginRateLimit, async (req, res) => {
     });
 
     if (!usuario || !usuario.credenciales) {
+      publishSystemEvent({
+        tipo_evento: 'LOGIN_FALLIDO',
+        entidad: 'auth_attempt',
+        resultado: 'FALLIDO',
+        ip: req.ip,
+        metadata: { motivo: 'credenciales_invalidas' },
+      });
       return res.status(401).json({
         error: 'Credenciales inválidas',
       });
     }
 
     if (!usuario.correo_verificado) {
+      publishSystemEvent({
+        tipo_evento: 'LOGIN_FALLIDO',
+        entidad: 'auth_attempt',
+        resultado: 'FALLIDO',
+        ip: req.ip,
+        metadata: { motivo: 'cuenta_no_verificada' },
+      });
       return res.status(403).json({
         error:
           'Debe verificar su correo electrónico antes de iniciar sesión',
@@ -2677,12 +2738,26 @@ app.post('/auth/login', loginRateLimit, async (req, res) => {
     }
 
     if (usuario.estado !== 'ACTIVO') {
+      publishSystemEvent({
+        tipo_evento: 'LOGIN_FALLIDO',
+        entidad: 'auth_attempt',
+        resultado: 'FALLIDO',
+        ip: req.ip,
+        metadata: { motivo: 'cuenta_inactiva' },
+      });
       return res.status(403).json({
         error: 'El usuario se encuentra inactivo',
       });
     }
 
     if (usuario.credenciales.estado !== 'ACTIVO') {
+      publishSystemEvent({
+        tipo_evento: 'LOGIN_FALLIDO',
+        entidad: 'auth_attempt',
+        resultado: 'FALLIDO',
+        ip: req.ip,
+        metadata: { motivo: 'credenciales_inactivas' },
+      });
       return res.status(403).json({
         error: 'Las credenciales se encuentran inactivas',
       });
@@ -2694,6 +2769,13 @@ app.post('/auth/login', loginRateLimit, async (req, res) => {
     );
 
     if (!contrasenaValida) {
+      publishSystemEvent({
+        tipo_evento: 'LOGIN_FALLIDO',
+        entidad: 'auth_attempt',
+        resultado: 'FALLIDO',
+        ip: req.ip,
+        metadata: { motivo: 'credenciales_invalidas' },
+      });
       return res.status(401).json({
         error: 'Credenciales inválidas',
       });
@@ -2732,6 +2814,14 @@ app.post('/auth/login', loginRateLimit, async (req, res) => {
         revocado_en: null,
         creado_en: ahora,
       },
+    });
+
+    publishSystemEvent({
+      usuario_id: usuario.id.toString(),
+      tipo_evento: 'LOGIN',
+      entidad: 'auth_attempt',
+      resultado: 'EXITOSO',
+      ip: req.ip,
     });
 
     const user = buildUserPayload({
@@ -2869,6 +2959,10 @@ app.post('/auth/logout', authRateLimit, async (req, res) => {
     const tokenHash =
       hashToken(refresh_token);
 
+    const tokenRegistro = await prisma.tokens_refresh.findUnique({
+      where: { hash_token: tokenHash },
+      select: { usuario_id: true },
+    });
     const resultado =
       await prisma.tokens_refresh.updateMany({
         where: {
@@ -2879,6 +2973,16 @@ app.post('/auth/logout', authRateLimit, async (req, res) => {
           revocado_en: new Date(),
         },
       });
+
+    if (resultado.count > 0 && tokenRegistro) {
+      publishSystemEvent({
+        usuario_id: tokenRegistro.usuario_id.toString(),
+        tipo_evento: 'LOGOUT',
+        entidad: 'auth_attempt',
+        resultado: 'EXITOSO',
+        ip: req.ip,
+      });
+    }
 
     res.json({
       message: 'Sesión cerrada correctamente',

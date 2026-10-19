@@ -1,4 +1,6 @@
 ﻿const express = require('express');
+const { publishSystemEvent } = require('../../../contracts/event-publisher');
+const { verifiedActorId } = require('../../../contracts/event-actor');
 
 function texto(valor) {
   return String(valor ?? '')
@@ -293,6 +295,16 @@ module.exports = function registrarRutasVariantes(app, prisma) {
           productos: true,
         },
       });
+
+      if (Number(actual.precio) !== precioLimpio) {
+        publishSystemEvent({
+          usuario_id: verifiedActorId(req),
+          tipo_evento: 'PRECIO_MODIFICADO',
+          entidad: 'variante_producto',
+          entidad_id: variante.id.toString(),
+          metadata: { precio_anterior: Number(actual.precio), precio_nuevo: precioLimpio },
+        });
+      }
 
       return res.json(variante);
     } catch (error) {

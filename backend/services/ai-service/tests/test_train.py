@@ -1,6 +1,6 @@
-from app.config import FEATURE_COLUMNS
+from app.config import FEATURE_COLUMNS, MODEL_FEATURE_COLUMNS
 from app.dataset import generate_training_frame, write_datasets
-from app.train_model import DatasetError, load_dataset, train_decision_tree
+from app.train_model import DatasetError, grouped_scenario_split, load_dataset, train_decision_tree
 
 
 def test_balanced_dataset_has_both_classes():
@@ -8,6 +8,11 @@ def test_balanced_dataset_has_both_classes():
     assert summary["n_normal"] > 0
     assert summary["n_anomalo"] > 0
     assert "label" in frame.columns
+    assert "label_source" in frame.columns
+    train_indices, test_indices = grouped_scenario_split(frame, 0.25, 42)
+    train_scenarios = set(frame.iloc[train_indices]["scenario"])
+    test_scenarios = set(frame.iloc[test_indices]["scenario"])
+    assert train_scenarios.isdisjoint(test_scenarios)
     for column in FEATURE_COLUMNS:
         assert column in frame.columns
     assert "anomaly_detected" not in frame.columns
@@ -53,4 +58,28 @@ def test_write_and_train(tmp_path, monkeypatch):
     metadata = train_decision_tree(dataset_path=config.DATASET_PATH)
     assert metadata["algoritmo"] == "DecisionTreeClassifier"
     assert "accuracy" in metadata["metricas"]
+    assert "confusion_matrix" in metadata["metricas"]
+    assert "f1_por_clase" in metadata["metricas"]
+    assert "f1_macro" in metadata["metricas"]
+    assert "baseline_most_frequent" in metadata["metricas"]
+    assert metadata["metricas"]["scenario_groups_test"]
+    assert metadata["parametros"]["max_depth"] == 5
+    assert metadata["features"] == MODEL_FEATURE_COLUMNS
+    assert not {
+        "event_count_5m",
+        "event_count_10m",
+        "event_count_30m",
+        "events_per_minute",
+        "time_since_last_login",
+        "time_since_last_stock_change",
+        "time_since_last_price_change",
+        "failed_login_rule",
+        "cancellation_rule",
+        "stock_sale_rule",
+        "price_sale_rule",
+        "admin_activity_rule",
+        "combined_pattern_rule",
+        "risk_rule_count",
+    }.intersection(metadata["features"])
+    assert metadata["modelo_final_entrenado_con_dataset_completo"] is True
     assert config.CURRENT_MODEL_PATH.exists()

@@ -10,22 +10,70 @@ import type {
   Category,
   Product,
   ProductForm,
+  ProductVariant,
+  ProductVariantForm,
 } from "../types/products.types";
 
 import { getCategories } from "../services/categoriesApi";
 
 import {
+  changeProductVariantStatus,
   changeProductStatus,
+  createProductVariant,
   createProduct,
+  getProduct,
   getProducts,
+  updateProductVariant,
   updateProduct,
 } from "../services/productsApi";
+import { ensureInventoryForVariant } from "../../inventory/services/inventoryApi";
 
 const EMPTY_FORM: ProductForm = {
   categoria_id: "",
   nombre: "",
   descripcion: "",
+  sku: "",
+  talla: "",
+  color: "",
+  precio: "",
 };
+
+function createVariantForm(): ProductVariantForm {
+  return {
+    clientKey: `new-${crypto.randomUUID()}`,
+    sku: "",
+    talla: "",
+    color: "",
+    precio: "",
+    estado: "ACTIVO",
+  };
+}
+
+function toVariantForm(variant: ProductVariant): ProductVariantForm {
+  return {
+    clientKey: variant.id,
+    id: variant.id,
+    sku: variant.sku,
+    talla: variant.talla ?? "",
+    color: variant.color ?? "",
+    precio: String(variant.precio),
+    estado: variant.estado,
+  };
+}
+
+function productFormFrom(product: Product): ProductForm {
+  const firstVariant = product.variantes?.[0];
+
+  return {
+    categoria_id: product.categoria_id,
+    nombre: product.nombre,
+    descripcion: product.descripcion ?? "",
+    sku: firstVariant?.sku ?? "",
+    talla: firstVariant?.talla ?? "",
+    color: firstVariant?.color ?? "",
+    precio: firstVariant?.precio ?? "",
+  };
+}
 
 function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -45,6 +93,10 @@ function ProductsPage() {
     useState<Product | null>(null);
 
   const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
+  const [variantForms, setVariantForms] = useState<ProductVariantForm[]>([]);
+  const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
+  const variantsEditable =
+    modal === "create" || selectedProduct?.estado === "ACTIVO";
 
   const loadProducts = async (term = search) => {
     setLoading(true);
@@ -95,29 +147,37 @@ function ProductsPage() {
     setSelectedProduct(null);
 
     setForm({
+      ...EMPTY_FORM,
       categoria_id:
         categories.length > 0
           ? categories[0].id
           : "",
-      nombre: "",
-      descripcion: "",
     });
+    setVariantForms([createVariantForm()]);
 
     setModal("create");
   };
 
-  const openEdit = (product: Product) => {
+  const openEdit = async (product: Product) => {
     setError("");
     setNotice("");
-    setSelectedProduct(product);
+    setLoadingProductId(product.id);
 
-    setForm({
-      categoria_id: product.categoria_id,
-      nombre: product.nombre,
-      descripcion: product.descripcion || "",
-    });
-
-    setModal("edit");
+    try {
+      const detail = await getProduct(product.id);
+      setSelectedProduct(detail);
+      setForm(productFormFrom(detail));
+      setVariantForms((detail.variantes ?? []).map(toVariantForm));
+      setModal("edit");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo cargar el detalle del producto.",
+      );
+    } finally {
+      setLoadingProductId(null);
+    }
   };
 
   const closeModal = () => {
@@ -128,6 +188,21 @@ function ProductsPage() {
     setModal(null);
     setSelectedProduct(null);
     setForm(EMPTY_FORM);
+    setVariantForms([]);
+  };
+
+  const updateVariantForm = (
+    clientKey: string,
+    field: "sku" | "talla" | "color" | "precio",
+    value: string,
+  ) => {
+    setVariantForms((current) =>
+      current.map((variant) =>
+        variant.clientKey === clientKey
+          ? { ...variant, [field]: value }
+          : variant,
+      ),
+    );
   };
 
   const handleSubmit = async (
@@ -145,27 +220,258 @@ function ProductsPage() {
       return;
     }
 
+    const activeVariants = variantForms.filter(
+      (variant) => variant.estado === "ACTIVO",
+    );
+
+    if (
+      activeVariants.length === 0 &&
+      !(modal === "edit" && selectedProduct?.estado === "INACTIVO")
+    ) {
+      setError("El producto debe tener al menos una variante activa.");
+      return;
+    }
+
+    for (const variant of activeVariants) {
+      if (!variant.sku.trim()) {
+        setError("El SKU es obligatorio para cada variante activa.");
+        return;
+      }
+
+      const price = Number(variant.precio);
+      if (
+        !variant.precio.trim() ||
+        !Number.isFinite(price) ||
+        price <= 0
+      ) {
+        setError("El precio de cada variante debe ser mayor que cero.");
+        return;
+      }
+    }
+
     setError("");
     setNotice("");
     setSaving(true);
 
+    let savedProductId: string | null = null;
+
     try {
       if (modal === "create") {
-        await createProduct(form);
+        const initialVariant = activeVariants[0];
+        const created = await createProduct({
+          ...form,
+          sku: initialVariant.sku,
+          talla: initialVariant.talla,
+          color: initialVariant.color,
+          precio: initialVariant.precio,
+        });
+        savedProductId = created.id;
+        setSelectedProduct(created);
+        setForm(productFormFrom(created));
+        setModal("edit");
+        const initialSaved = created.variantes?.find(
+          (variant) =>
+            variant.sku.toUpperCase() ===
+            initialVariant.sku.trim().toUpperCase(),
+        );
+        if (initialSaved) {
+          setVariantForms((current) =>
+            current.map((variant) =>
+              variant.clientKey === initialVariant.clientKey
+                ? toVariantForm(initialSaved)
+                : variant,
+            ),
+          );
+        }
+
+        const failures: string[] = [];
+        const failedKeys = new Set<string>();
+        for (const variant of activeVariants.slice(1)) {
+          try {
+            const createdVariant = await createProductVariant(
+              created.id,
+              variant,
+            );
+
+            await ensureInventoryForVariant(createdVariant.id);
+          } catch (err) {
+            failedKeys.add(variant.clientKey);
+            failures.push(
+              `${variant.sku}: ${
+                err instanceof Error ? err.message : "No se pudo crear."
+              }`,
+            );
+          }
+        }
+
+        const detail = await getProduct(created.id);
+
+        for (const variant of detail.variantes ?? []) {
+          if (variant.estado === "ACTIVO") {
+            await ensureInventoryForVariant(variant.id);
+          }
+        }
+
+        setProducts((current) =>
+          current.some((product) => product.id === detail.id)
+            ? current.map((product) =>
+                product.id === detail.id ? detail : product,
+              )
+            : [detail, ...current],
+        );
+        setSelectedProduct(detail);
+
+        if (failures.length > 0) {
+          const persistedVariants = detail.variantes ?? [];
+          setVariantForms(
+            variantForms.map((variant) => {
+              const saved = persistedVariants.find(
+                (item) =>
+                  item.sku.toUpperCase() === variant.sku.trim().toUpperCase(),
+              );
+              if (saved && !failedKeys.has(variant.clientKey)) {
+                return toVariantForm(saved);
+              }
+              return variant;
+            }),
+          );
+          setForm(productFormFrom(detail));
+          setModal("edit");
+          setError(
+            `El producto se creó, pero algunas variantes no se guardaron. Revísalas e inténtalo de nuevo: ${failures.join("; ")}`,
+          );
+          return;
+        }
+
+        setModal(null);
+        setSelectedProduct(null);
+        setVariantForms([]);
+        setForm(EMPTY_FORM);
         setNotice("Producto creado correctamente.");
       } else if (modal === "edit" && selectedProduct) {
-        await updateProduct(selectedProduct.id, form);
-        setNotice("Producto actualizado correctamente.");
-      }
+        const updated = await updateProduct(selectedProduct.id, form);
+        savedProductId = updated.id;
 
-      closeModal();
-      await loadProducts();
+        const failures: string[] = [];
+        const failedKeys = new Set<string>();
+        for (const variant of variantForms) {
+          try {
+            if (variant.id) {
+              const previous = selectedProduct.variantes?.find(
+                (item) => item.id === variant.id,
+              );
+              const fieldsChanged =
+                previous !== undefined &&
+                (previous.sku !== variant.sku.trim().toUpperCase() ||
+                  (previous.talla ?? "") !== variant.talla.trim() ||
+                  (previous.color ?? "") !== variant.color.trim() ||
+                  Number(previous.precio) !== Number(variant.precio));
+              if (fieldsChanged) {
+                await updateProductVariant(
+                  variant.id,
+                  selectedProduct.id,
+                  variant,
+                );
+              }
+              if (
+                previous?.estado === "ACTIVO" &&
+                variant.estado === "INACTIVO"
+              ) {
+                await changeProductVariantStatus(variant.id, "INACTIVO");
+              }
+            } else if (variant.estado === "ACTIVO") {
+                const createdVariant = await createProductVariant(
+                  selectedProduct.id,
+                  variant,
+                );
+
+                // Se inicializa el inventario después de persistir la variante.
+                await ensureInventoryForVariant(createdVariant.id);
+              }
+          } catch (err) {
+            failedKeys.add(variant.clientKey);
+            failures.push(
+              `${variant.sku || "Variante nueva"}: ${
+                err instanceof Error ? err.message : "No se pudo guardar."
+              }`,
+            );
+          }
+        }
+
+        const detail = await getProduct(selectedProduct.id);
+        setProducts((current) =>
+          current.map((product) =>
+            product.id === detail.id ? detail : product,
+          ),
+        );
+        setSelectedProduct(detail);
+
+        if (failures.length > 0) {
+          setVariantForms(
+            variantForms.map((variant) => {
+              if (failedKeys.has(variant.clientKey)) return variant;
+              const saved = detail.variantes?.find(
+                (item) =>
+                  (variant.id && item.id === variant.id) ||
+                  (!variant.id &&
+                    item.sku.toUpperCase() ===
+                      variant.sku.trim().toUpperCase()),
+              );
+              return saved ? toVariantForm(saved) : variant;
+            }),
+          );
+          setForm(productFormFrom(detail));
+          setError(
+            `La información general del producto se guardó, pero algunas variantes no se sincronizaron. Revísalas e inténtalo de nuevo: ${failures.join("; ")}`,
+          );
+          return;
+        }
+
+        setModal(null);
+        setSelectedProduct(null);
+        setVariantForms([]);
+        setForm(EMPTY_FORM);
+        setNotice("Producto y variantes actualizados correctamente.");
+      }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo guardar el producto.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Error desconocido.";
+      if (savedProductId) {
+        setError(
+          `El producto se guardó, pero no se pudo confirmar o actualizar el detalle. ${message}`,
+        );
+        try {
+          const detail = await getProduct(savedProductId);
+          setSelectedProduct(detail);
+          setProducts((current) =>
+            current.some((product) => product.id === detail.id)
+              ? current.map((product) =>
+                  product.id === detail.id ? detail : product,
+                )
+              : [detail, ...current],
+          );
+          setForm(productFormFrom(detail));
+          setVariantForms((current) => {
+            const serverVariants = detail.variantes ?? [];
+            return current.map((variant) => {
+              const saved = serverVariants.find(
+                (item) =>
+                  (variant.id && item.id === variant.id) ||
+                  item.sku.toUpperCase() ===
+                    variant.sku.trim().toUpperCase(),
+              );
+              return saved ? toVariantForm(saved) : variant;
+            });
+          });
+          setModal("edit");
+        } catch {
+          setError(
+            `El producto se guardó, pero no se pudo volver a consultar. ${message}`,
+          );
+        }
+      } else {
+        setError(message);
+      }
     } finally {
       setSaving(false);
     }
@@ -414,10 +720,13 @@ function ProductsPage() {
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
-                              onClick={() => openEdit(product)}
+                              onClick={() => void openEdit(product)}
+                              disabled={loadingProductId === product.id}
                               className="rounded-lg border theme-border px-3 py-2 text-xs font-semibold theme-text"
                             >
-                              Editar
+                              {loadingProductId === product.id
+                                ? "Cargando..."
+                                : "Editar"}
                             </button>
 
                             <button
@@ -442,9 +751,9 @@ function ProductsPage() {
       </div>
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-lg rounded-2xl border theme-border bg-[var(--bg)] p-6 shadow-xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/40 px-3 py-2 sm:items-center sm:px-4">
+          <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border theme-border bg-[var(--bg)] shadow-xl">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b theme-border p-4 sm:p-6">
               <div>
                 <h2 className="text-xl font-semibold theme-text">
                   {modal === "create"
@@ -461,86 +770,287 @@ function ProductsPage() {
                 type="button"
                 onClick={closeModal}
                 disabled={saving}
-                className="text-xl theme-text-soft"
+                className="rounded-lg px-2 text-xl theme-text-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                 aria-label="Cerrar"
               >
                 ×
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-semibold theme-text">
-                  Categoría
-                </label>
+            <form
+              onSubmit={handleSubmit}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
+                {error && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  >
+                    {error}
+                  </div>
+                )}
+                <div>
+                  <label
+                    htmlFor="product-category"
+                    className="mb-1 block text-sm font-semibold theme-text"
+                  >
+                    Categoría
+                  </label>
+                  <select
+                    id="product-category"
+                    value={form.categoria_id}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        categoria_id: event.target.value,
+                      })
+                    }
+                    required
+                    className="w-full rounded-xl border theme-border bg-[var(--card-bg)] px-4 py-3 text-sm theme-text outline-none focus-visible:outline focus-visible:outline-2"
+                  >
+                    <option value="">Seleccionar categoría</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                <select
-                  value={form.categoria_id}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      categoria_id: event.target.value,
-                    })
-                  }
-                  required
-                  className="w-full rounded-xl border theme-border bg-[var(--card-bg)] px-4 py-3 text-sm theme-text outline-none"
+                <div>
+                  <label
+                    htmlFor="product-name"
+                    className="mb-1 block text-sm font-semibold theme-text"
+                  >
+                    Nombre
+                  </label>
+                  <input
+                    id="product-name"
+                    value={form.nombre}
+                    onChange={(event) =>
+                      setForm({ ...form, nombre: event.target.value })
+                    }
+                    required
+                    maxLength={150}
+                    className="w-full rounded-xl border theme-border bg-transparent px-4 py-3 text-sm theme-text outline-none focus-visible:outline focus-visible:outline-2"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="product-description"
+                    className="mb-1 block text-sm font-semibold theme-text"
+                  >
+                    Descripción
+                  </label>
+                  <textarea
+                    id="product-description"
+                    value={form.descripcion}
+                    onChange={(event) =>
+                      setForm({ ...form, descripcion: event.target.value })
+                    }
+                    rows={3}
+                    className="w-full resize-y rounded-xl border theme-border bg-transparent px-4 py-3 text-sm theme-text outline-none focus-visible:outline focus-visible:outline-2"
+                  />
+                </div>
+
+                <section
+                  aria-labelledby="variants-heading"
+                  className="space-y-4 rounded-xl border theme-border p-3 sm:p-4"
                 >
-                  <option value="">Seleccionar categoría</option>
-
-                  {categories.map((category) => (
-                    <option
-                      key={category.id}
-                      value={category.id}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3
+                        id="variants-heading"
+                        className="text-sm font-semibold theme-text"
+                      >
+                        Variantes
+                      </h3>
+                      <p className="mt-1 text-xs theme-text-soft">
+                        El producto debe conservar al menos una variante activa.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVariantForms((current) => [
+                          ...current,
+                          createVariantForm(),
+                        ])
+                      }
+                      disabled={!variantsEditable || saving}
+                      className="rounded-lg border theme-border px-3 py-2 text-xs font-semibold theme-text focus-visible:outline focus-visible:outline-2"
                     >
-                      {category.nombre}
-                    </option>
-                  ))}
-                </select>
+                      + Añadir variante
+                    </button>
+                  </div>
+                  {!variantsEditable && (
+                    <p className="text-xs theme-text-soft">
+                      No se pueden modificar variantes mientras el producto esté inactivo.
+                    </p>
+                  )}
+
+                  {variantForms.map((variant, index) => {
+                    const inactive = variant.estado === "INACTIVO";
+                    const labelId = `variant-heading-${variant.clientKey}`;
+
+                    return (
+                      <fieldset
+                        key={variant.clientKey}
+                        className="min-w-0 space-y-3 rounded-xl border theme-border p-3 sm:p-4"
+                      >
+                        <legend id={labelId} className="px-1 text-xs font-semibold theme-text">
+                          Variante {index + 1}
+                          {inactive ? " · Inactiva" : ""}
+                        </legend>
+                        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <div className="min-w-0">
+                            <label
+                              htmlFor={`${variant.clientKey}-sku`}
+                              className="mb-1 block text-xs font-semibold theme-text"
+                            >
+                              SKU
+                            </label>
+                            <input
+                              id={`${variant.clientKey}-sku`}
+                              value={variant.sku}
+                              onChange={(event) =>
+                                updateVariantForm(
+                                  variant.clientKey,
+                                  "sku",
+                                  event.target.value,
+                                )
+                              }
+                              required={!inactive}
+                              maxLength={100}
+                              autoCapitalize="characters"
+                              disabled={!variantsEditable || saving}
+                              className="w-full min-w-0 rounded-lg border theme-border bg-transparent px-3 py-3 text-sm uppercase theme-text outline-none focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <label
+                              htmlFor={`${variant.clientKey}-size`}
+                              className="mb-1 block text-xs font-semibold theme-text"
+                            >
+                              Talla
+                            </label>
+                            <input
+                              id={`${variant.clientKey}-size`}
+                              value={variant.talla}
+                              onChange={(event) =>
+                                updateVariantForm(
+                                  variant.clientKey,
+                                  "talla",
+                                  event.target.value,
+                                )
+                              }
+                              maxLength={50}
+                              disabled={!variantsEditable || saving}
+                              className="w-full min-w-0 rounded-lg border theme-border bg-transparent px-3 py-3 text-sm theme-text outline-none focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <label
+                              htmlFor={`${variant.clientKey}-color`}
+                              className="mb-1 block text-xs font-semibold theme-text"
+                            >
+                              Color
+                            </label>
+                            <input
+                              id={`${variant.clientKey}-color`}
+                              value={variant.color}
+                              onChange={(event) =>
+                                updateVariantForm(
+                                  variant.clientKey,
+                                  "color",
+                                  event.target.value,
+                                )
+                              }
+                              maxLength={50}
+                              disabled={!variantsEditable || saving}
+                              className="w-full min-w-0 rounded-lg border theme-border bg-transparent px-3 py-3 text-sm theme-text outline-none focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <label
+                              htmlFor={`${variant.clientKey}-price`}
+                              className="mb-1 block text-xs font-semibold theme-text"
+                            >
+                              Precio
+                            </label>
+                            <input
+                              id={`${variant.clientKey}-price`}
+                              type="number"
+                              value={variant.precio}
+                              onChange={(event) =>
+                                updateVariantForm(
+                                  variant.clientKey,
+                                  "precio",
+                                  event.target.value,
+                                )
+                              }
+                              required={!inactive}
+                              min="0.01"
+                              step="0.01"
+                              inputMode="decimal"
+                              disabled={!variantsEditable || saving}
+                              className="w-full min-w-0 rounded-lg border theme-border bg-transparent px-3 py-3 text-sm theme-text outline-none focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                          </div>
+                        </div>
+                        {variant.id ? (
+                          inactive ? (
+                            <p className="text-xs theme-text-soft">
+                              Esta variante permanece inactiva y no se reactivará al guardar.
+                            </p>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!variantsEditable || saving}
+                              onClick={() =>
+                                setVariantForms((current) =>
+                                  current.map((item) =>
+                                    item.clientKey === variant.clientKey
+                                      ? { ...item, estado: "INACTIVO" }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              className="text-xs font-semibold text-red-700 underline focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Desactivar variante
+                            </button>
+                          )
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!variantsEditable || saving}
+                            onClick={() =>
+                              setVariantForms((current) =>
+                                current.filter(
+                                  (item) => item.clientKey !== variant.clientKey,
+                                ),
+                              )
+                            }
+                            className="text-xs font-semibold text-red-700 underline focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Quitar variante nueva
+                          </button>
+                        )}
+                      </fieldset>
+                    );
+                  })}
+                </section>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-semibold theme-text">
-                  Nombre
-                </label>
-
-                <input
-                  value={form.nombre}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      nombre: event.target.value,
-                    })
-                  }
-                  required
-                  maxLength={150}
-                  className="w-full rounded-xl border theme-border bg-transparent px-4 py-3 text-sm theme-text outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-semibold theme-text">
-                  Descripción
-                </label>
-
-                <textarea
-                  value={form.descripcion}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      descripcion: event.target.value,
-                    })
-                  }
-                  rows={4}
-                  className="w-full resize-none rounded-xl border theme-border bg-transparent px-4 py-3 text-sm theme-text outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex shrink-0 justify-end gap-3 border-t theme-border bg-[var(--bg)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
                 <button
                   type="button"
                   onClick={closeModal}
                   disabled={saving}
-                  className="rounded-xl border theme-border px-5 py-3 text-sm font-semibold theme-text"
+                  className="rounded-xl border theme-border px-5 py-3 text-sm font-semibold theme-text disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -548,7 +1058,7 @@ function ProductsPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="theme-button-dark rounded-xl px-5 py-3 text-sm font-semibold"
+                  className="theme-button-dark rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? "Guardando..." : "Guardar"}
                 </button>
@@ -562,7 +1072,3 @@ function ProductsPage() {
 }
 
 export default ProductsPage;
-
-
-
-

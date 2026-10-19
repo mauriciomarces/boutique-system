@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from "react-router-dom";
+﻿import { useLocation, useNavigate } from "react-router-dom";
 
 type AdministrationSidebarProps = {
   sidebarOpen: boolean;
@@ -79,6 +79,7 @@ function AdministrationSidebar({
             {navButton("Categorías", "/administracion/categorias")}
 
             {navButton("Inventario", "/administracion/inventario")}
+            {navButton("Compras", "/administracion/compras")}
 
             {navButton("Ventas", "/administracion/ventas")}
 

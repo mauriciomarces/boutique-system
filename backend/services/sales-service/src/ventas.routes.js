@@ -1,5 +1,6 @@
 const INVENTORY_SERVICE_URL =
   process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:4004';
+const { publishSystemEvent } = require('../../../contracts/event-publisher');
 const INVENTORY_REQUEST_TIMEOUT_MS = Math.max(
   1,
   Number.parseInt(process.env.INVENTORY_REQUEST_TIMEOUT_MS, 10) || 15000,
@@ -151,6 +152,11 @@ async function inventoryRequest(path, options = {}) {
   return data;
 }
 
+function forwardedAuthorizationHeaders(req) {
+  const authorization = req.get?.('authorization') || req.headers?.authorization;
+  return authorization ? { authorization } : {};
+}
+
 module.exports = function registrarRutasVentas(app, prisma) {
   /*
    * =========================================================
@@ -192,6 +198,7 @@ module.exports = function registrarRutasVentas(app, prisma) {
 
     let ventaCreada = null;
     const movimientosRealizados = [];
+    let inventarioIndeterminado = false;
 
     try {
       /*
@@ -301,6 +308,27 @@ module.exports = function registrarRutasVentas(app, prisma) {
 
       const total = subtotal;
 
+      // Validar el pago antes de crear la venta o descontar inventario.
+      let pagoPreparado = null;
+
+      if (body.pago) {
+        const metodo_pago = validarMetodoPago(body.pago.metodo_pago);
+        const monto = decimalPositivo(
+          body.pago.monto,
+          'El monto del pago',
+        );
+
+        if (monto > total) {
+          return res.status(400).json({
+            error:
+              'El monto del pago no puede superar el total de la venta',
+          });
+        }
+
+        pagoPreparado = { metodo_pago, monto };
+      }
+
+
       /*
        * -------------------------------------------------------
        * 5. Crear venta PENDIENTE
@@ -340,35 +368,89 @@ module.exports = function registrarRutasVentas(app, prisma) {
 
       try {
         for (const detalle of detalles) {
-          const movimiento = await inventoryRequest(
-            '/internal/ventas/movimientos',
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                variante_producto_id:
-                  detalle.variante_producto_id.toString(),
-                tipo_movimiento: 'SALIDA',
-                cantidad: detalle.cantidad,
-                referencia_tipo: 'VENTA',
-                referencia_id: ventaCreada.id.toString(),
-                motivo: `Salida por venta #${ventaCreada.id}`,
-              }),
-            },
+          const detalleVenta = ventaCreada.detalle_ventas.find(
+            (item) =>
+              item.variante_producto_id.toString() ===
+              detalle.variante_producto_id.toString(),
           );
 
+          if (!detalleVenta) {
+            throw new Error(
+              'No se encontró el detalle persistido de la venta.',
+            );
+          }
+
+          const idempotencyKey =
+            `VENTA:${ventaCreada.id.toString()}:` +
+            `DETALLE:${detalleVenta.id.toString()}:SALIDA`;
+
+          const payloadMovimiento = {
+            variante_producto_id: detalle.variante_producto_id.toString(),
+            tipo_movimiento: 'SALIDA',
+            cantidad: detalle.cantidad,
+            referencia_tipo: 'VENTA',
+            referencia_id: ventaCreada.id.toString(),
+            motivo: `Salida por venta #${ventaCreada.id}`,
+            idempotency_key: idempotencyKey,
+          };
+
+          let movimiento;
+
+          try {
+            movimiento = await inventoryRequest(
+              '/internal/ventas/movimientos',
+              {
+                method: 'POST',
+                body: JSON.stringify(payloadMovimiento),
+                headers: forwardedAuthorizationHeaders(req),
+              },
+            );
+          } catch (errorMovimiento) {
+            try {
+              movimiento = await inventoryRequest(
+                '/internal/ventas/movimientos',
+                {
+                  method: 'POST',
+                  body: JSON.stringify(payloadMovimiento),
+                  headers: forwardedAuthorizationHeaders(req),
+                },
+              );
+            } catch (errorReintento) {
+              inventarioIndeterminado = true;
+              console.error(
+                'No se pudo determinar el resultado del movimiento de inventario:',
+                errorReintento,
+              );
+              throw errorReintento;
+            }
+          }
+
           movimientosRealizados.push({
-            variante_producto_id:
-              detalle.variante_producto_id,
+            detalle_venta_id: detalleVenta.id,
+            variante_producto_id: detalle.variante_producto_id,
             cantidad: detalle.cantidad,
             movimiento,
           });
         }
       } catch (inventoryError) {
+        console.error('Error al descontar inventario:', inventoryError);
+
+        if (inventarioIndeterminado) {
+          return res.status(500).json({
+            error:
+              'No se pudo confirmar el resultado de los movimientos de inventario. La venta requiere conciliación.',
+            venta_id: ventaCreada.id.toString(),
+            requiere_conciliacion: true,
+          });
+        }
         /*
          * -----------------------------------------------------
          * Compensación de movimientos ya realizados
          * -----------------------------------------------------
          */
+
+
+        let compensacionFallida = false;
 
         for (const movimiento of movimientosRealizados.reverse()) {
           try {
@@ -384,15 +466,31 @@ module.exports = function registrarRutasVentas(app, prisma) {
                   referencia_tipo: 'VENTA',
                   referencia_id: ventaCreada.id.toString(),
                   motivo: `Compensación de venta #${ventaCreada.id}`,
+                  idempotency_key:
+                    `VENTA:${ventaCreada.id.toString()}:` +
+                    `DETALLE:${movimiento.detalle_venta_id.toString()}:COMPENSACION`,
                 }),
+                headers: forwardedAuthorizationHeaders(req),
               },
             );
           } catch (compensacionError) {
+            compensacionFallida = true;
             console.error(
               'Error durante la compensación de inventario:',
               compensacionError,
             );
           }
+        }
+
+
+        if (compensacionFallida) {
+          return res.status(500).json({
+            error:
+              'La compensación de inventario no se completó. La venta requiere conciliación.',
+            venta_id: ventaCreada.id.toString(),
+            estado: 'PENDIENTE',
+            requiere_conciliacion: true,
+          });
         }
 
         await prisma.ventas.update({
@@ -430,40 +528,68 @@ module.exports = function registrarRutasVentas(app, prisma) {
         },
       });
 
+      publishSystemEvent({
+        event_id: `sale-created-${ventaConfirmada.id}`,
+        timestamp: ventaCreada.creado_en,
+        usuario_id: req.authenticatedUser?.id ?? null,
+        tipo_evento: 'VENTA_CREADA',
+        entidad: 'venta',
+        entidad_id: ventaConfirmada.id.toString(),
+        metadata: {
+          venta_id: ventaConfirmada.id.toString(),
+          total: Number(ventaConfirmada.total),
+          items: detalles.length,
+        },
+      });
+
       /*
        * -------------------------------------------------------
        * 8. Registrar pago opcional
        * -------------------------------------------------------
        */
 
-      if (body.pago) {
-        const metodo_pago = validarMetodoPago(
-          body.pago.metodo_pago,
-        );
+      if (pagoPreparado) {
+        const { metodo_pago, monto } = pagoPreparado;
 
-        const monto = decimalPositivo(
-          body.pago.monto,
-          'El monto del pago',
-        );
+        try {
+          const pago = await prisma.pagos.create({
+            data: {
+              venta_id: ventaConfirmada.id,
+              metodo_pago,
+              monto,
+              estado: monto === total ? 'PAGADO' : 'PENDIENTE',
+              fecha_pago: new Date(),
+              creado_en: new Date(),
+              actualizado_en: new Date(),
+            },
+          });
+          publishSystemEvent({
+            event_id: `payment-created-${pago.id}`,
+            usuario_id: req.authenticatedUser?.id ?? null,
+            tipo_evento: 'PAGO_REGISTRADO',
+            entidad: 'pago',
+            entidad_id: pago.id.toString(),
+            metadata: {
+              venta_id: ventaConfirmada.id.toString(),
+              estado: pago.estado,
+              metodo_pago: pago.metodo_pago,
+              monto: Number(pago.monto),
+            },
+          });
+        } catch (errorPago) {
+          console.error(
+            'La venta fue confirmada, pero no se pudo confirmar el registro del pago:',
+            errorPago,
+          );
 
-        if (monto > total) {
-          return res.status(400).json({
+          return res.status(500).json({
             error:
-              'El monto del pago no puede superar el total de la venta',
+              'La venta fue confirmada, pero el registro del pago requiere verificación. Compruebe el estado del pago antes de reintentar.',
+            venta_id: String(ventaConfirmada.id),
+            estado: 'CONFIRMADA',
+            requiere_verificacion_pago: true,
           });
         }
-
-        await prisma.pagos.create({
-          data: {
-            venta_id: ventaConfirmada.id,
-            metodo_pago,
-            monto,
-            estado: monto === total ? 'PAGADO' : 'PENDIENTE',
-            fecha_pago: new Date(),
-            creado_en: new Date(),
-            actualizado_en: new Date(),
-          },
-        });
       }
 
       const resultado = await prisma.ventas.findUnique({
@@ -480,6 +606,15 @@ module.exports = function registrarRutasVentas(app, prisma) {
       return res.status(201).json(resultado);
     } catch (error) {
       console.error('Error al crear venta:', error);
+
+      if (ventaCreada && (inventarioIndeterminado || movimientosRealizados.length > 0)) {
+        return res.status(500).json({
+          error:
+            'Ocurrió un error después de iniciar los movimientos de inventario. La venta requiere verificación antes de cualquier anulación.',
+          venta_id: ventaCreada.id.toString(),
+          requiere_conciliacion: true,
+        });
+      }
 
       if (ventaCreada) {
         try {
@@ -562,6 +697,16 @@ module.exports = function registrarRutasVentas(app, prisma) {
         include: { tareas: true, eventos: { orderBy: { creado_en: 'asc' } } },
       });
     }
+
+    publishSystemEvent({
+      event_id: `sale-cancellation-processing-${operacionId}-${operacionInicial.intentos + 1}`,
+      usuario_id: operacionInicial.solicitada_por_id?.toString() ?? null,
+      tipo_evento: 'VENTA_ANULACION_EN_PROCESO',
+      entidad: 'venta',
+      entidad_id: operacionInicial.venta_id.toString(),
+      timestamp: ahora,
+      metadata: { intento: operacionInicial.intentos + 1 },
+    });
 
     const renovarLease = async (tx) => {
       const ahoraLease = new Date();
@@ -1121,11 +1266,33 @@ module.exports = function registrarRutasVentas(app, prisma) {
           }
 
           operacion = await solicitarAnulacion(req, venta);
+          if (operacion.estado === 'PENDIENTE') {
+            publishSystemEvent({
+              event_id: `sale-cancellation-requested-${id}`,
+              usuario_id: operacion.solicitada_por_id?.toString() ?? null,
+              tipo_evento: 'VENTA_ANULACION_SOLICITADA',
+              entidad: 'venta',
+              entidad_id: id.toString(),
+              timestamp: operacion.creada_en || undefined,
+            });
+          }
         }
 
+        const yaEstabaCompletada = operacion?.estado === 'COMPLETADA';
         operacion = await procesarAnulacion(operacion.id);
 
         const completa = operacion?.estado === 'COMPLETADA';
+        if (completa && !yaEstabaCompletada) {
+          publishSystemEvent({
+            event_id: `sale-cancelled-${id}`,
+            timestamp: operacion.completada_en || undefined,
+            usuario_id: operacion.solicitada_por_id?.toString() ?? null,
+            tipo_evento: 'VENTA_ANULADA',
+            entidad: 'venta',
+            entidad_id: id.toString(),
+            metadata: { anulacion_estado: 'COMPLETADA' },
+          });
+        }
         const actual = await prisma.ventas.findUnique({
           where: { id },
           include: { clientes: true, detalle_ventas: true, pagos: true },
@@ -1241,7 +1408,19 @@ module.exports = function registrarRutasVentas(app, prisma) {
         return res.status(409).json({ error: 'La anulacion ya esta completada.' });
       }
 
+      const yaEstabaCompletada = operacion.estado === 'COMPLETADA';
       const resultado = await procesarAnulacion(operacion.id);
+      if (resultado?.estado === 'COMPLETADA' && !yaEstabaCompletada) {
+        publishSystemEvent({
+          event_id: `sale-cancelled-${id}`,
+          timestamp: resultado.completada_en || undefined,
+          usuario_id: resultado.solicitada_por_id?.toString() ?? null,
+          tipo_evento: 'VENTA_ANULADA',
+          entidad: 'venta',
+          entidad_id: id.toString(),
+          metadata: { anulacion_estado: 'COMPLETADA' },
+        });
+      }
       const salida = JSON.parse(JSON.stringify(
         resultado,
         (_key, value) => typeof value === 'bigint' ? value.toString() : value,
@@ -1325,6 +1504,19 @@ module.exports = function registrarRutasVentas(app, prisma) {
           fecha_pago: new Date(),
           creado_en: new Date(),
           actualizado_en: new Date(),
+        },
+      });
+
+      publishSystemEvent({
+        event_id: `payment-created-${pago.id}`,
+        usuario_id: req.authenticatedUser?.id ?? null,
+        tipo_evento: 'PAGO_REGISTRADO',
+        entidad: 'pago',
+        entidad_id: pago.id.toString(),
+        metadata: {
+          estado: pago.estado,
+          metodo_pago: pago.metodo_pago,
+          monto: Number(pago.monto),
         },
       });
 

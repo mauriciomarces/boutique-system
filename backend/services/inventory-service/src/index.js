@@ -4,6 +4,8 @@ require('dotenv').config();
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
+const { publishSystemEvent } = require('../../../contracts/event-publisher');
+const { verifiedActorId } = require('../../../contracts/event-actor');
 
 const app = express();
 const port = Number(process.env.PORT || 4004);
@@ -242,6 +244,63 @@ function validarSecretoVentas(req, res, next) {
   return next();
 }
 
+async function validarActorDeVenta(req, res, next) {
+  const authorization = req.get('authorization');
+  if (!authorization) {
+    req.authenticatedUser = null;
+    return next();
+  }
+  if (!/^Bearer\s+\S+$/i.test(authorization)) {
+    return res.status(401).json({ error: 'Token de acceso inválido' });
+  }
+
+  const usersServiceUrl = process.env.USERS_SERVICE_URL;
+  const internalSecret = process.env.INTERNAL_SERVICE_SECRET;
+  if (!usersServiceUrl || !internalSecret) {
+    console.error('La validación del actor de venta no está configurada.');
+    return res.status(503).json({ error: 'Servicio de autorización no disponible' });
+  }
+
+  try {
+    const authResponse = await fetch(
+      `${usersServiceUrl.replace(/\/+$/, '')}/internal/auth/validate`,
+      {
+        method: 'POST',
+        headers: {
+          authorization,
+          'x-internal-service-key': internalSecret,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ permission: 'VENTAS_CREAR' }),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+    let authResult;
+    try {
+      authResult = await authResponse.json();
+    } catch {
+      console.error('users-service devolvió una respuesta no válida al validar el actor de venta.');
+      return res.status(503).json({ error: 'No se pudo verificar el actor de venta' });
+    }
+
+    if (authResponse.status === 401 || authResponse.status === 403) {
+      return res.status(authResponse.status).json({
+        error: authResult.error || 'El actor no está autorizado para la venta',
+      });
+    }
+    if (!authResponse.ok || authResult.valid !== true || !authResult.user) {
+      console.error('users-service no confirmó el actor de venta.', authResponse.status);
+      return res.status(503).json({ error: 'No se pudo verificar el actor de venta' });
+    }
+
+    req.authenticatedUser = authResult.user;
+    return next();
+  } catch (error) {
+    console.error('Error al consultar users-service para validar el actor:', error.name || 'Error');
+    return res.status(503).json({ error: 'Servicio de autorización no disponible' });
+  }
+}
+
 app.get(
   '/internal/ventas/movimientos',
   validarSecretoVentas,
@@ -274,6 +333,7 @@ app.get(
 app.post(
   '/internal/ventas/movimientos',
   validarSecretoVentas,
+  validarActorDeVenta,
   async (req, res) => {
     const body = req.body || {};
     let variante_producto_id;
@@ -459,6 +519,21 @@ app.post(
 
         throw error;
       }
+
+      publishSystemEvent({
+        event_id: `inventory-movement-${resultado.movimiento.id}`,
+        timestamp: resultado.movimiento.creado_en || undefined,
+        usuario_id: verifiedActorId(req),
+        tipo_evento: 'STOCK_MODIFICADO',
+        entidad: 'variante_producto',
+        entidad_id: variante_producto_id.toString(),
+        metadata: {
+          tipo_movimiento,
+          cantidad,
+          referencia_tipo: 'VENTA',
+          venta_id: referencia_id.toString(),
+        },
+      });
 
       return res.status(201).json(serializar(resultado));
     } catch (error) {
@@ -896,6 +971,18 @@ app.post('/movimientos', async (req, res) => {
         existencia: existenciaActualizada,
         movimiento,
       };
+    });
+
+    publishSystemEvent({
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'STOCK_MODIFICADO',
+      entidad: 'variante_producto',
+      entidad_id: variante_producto_id.toString(),
+      metadata: {
+        tipo_movimiento,
+        cantidad: resultado.movimiento.cantidad,
+        referencia_tipo,
+      },
     });
 
     return res.status(201).json(serializar(resultado));

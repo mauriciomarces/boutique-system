@@ -1,4 +1,4 @@
-﻿import { useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
@@ -30,7 +30,7 @@ function AnalysisLayout({
             </p>
 
             <p className="mt-0.5 text-[9px] uppercase tracking-[0.2em] theme-text-muted">
-              AnÃ¡lisis experimental
+              Análisis experimental
             </p>
           </Link>
 
@@ -42,7 +42,7 @@ function AnalysisLayout({
               setSidebarOpen((value) => !value)
             }
             className="flex h-10 w-10 items-center justify-center rounded-xl border theme-border bg-[var(--bg)] theme-text shadow-lg lg:hidden"
-            aria-label="Abrir menÃº"
+            aria-label="Abrir menú"
           >
             <span className="flex flex-col gap-1.5">
               <span className="block h-0.5 w-5 rounded-full bg-current" />

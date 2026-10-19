@@ -4,6 +4,9 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 const registrarRutasVariantes = require('./variantes.routes');
+const { publishSystemEvent } = require('../../../contracts/event-publisher');
+const { verifiedActorId } = require('../../../contracts/event-actor');
+const { createProductAuthorizationMiddleware } = require('./authorization');
 
 const app = express();
 
@@ -25,6 +28,8 @@ const adapter = new PrismaMariaDb({
 const prisma = new PrismaClient({ adapter });
 
 app.use(express.json());
+
+app.use(createProductAuthorizationMiddleware());
 
 app.get('/health', (req, res) => {
   res.json({
@@ -191,25 +196,6 @@ app.put('/categorias/:id', async (req, res) => {
         error: 'Ya existe otra categoría con ese nombre',
       });
     }
-
-    if (
-      categoriaActual.estado === 'ACTIVO' &&
-      estado === 'INACTIVO'
-    ) {
-      const productosAsignados = await prisma.productos.count({
-        where: {
-          categoria_id: id,
-        },
-      });
-
-      if (productosAsignados > 0) {
-        return res.status(409).json({
-          error:
-            'No se puede desactivar la categoría porque tiene productos asociados.',
-          productos_asignados: productosAsignados,
-        });
-      }
-    }
     const categoria = await prisma.categorias.update({
       where: { id },
       data: {
@@ -355,7 +341,7 @@ app.get('/productos/:id', async (req, res) => {
 
 app.post('/productos', async (req, res) => {
   try {
-    const { categoria_id, nombre, descripcion } = req.body;
+    const { categoria_id, nombre, descripcion, variante } = req.body;
 
     if (
       categoria_id === undefined ||
@@ -414,11 +400,36 @@ app.post('/productos', async (req, res) => {
         ? String(descripcion).trim() || null
         : null;
 
+
+    if (
+      !variante ||
+      !String(variante.sku ?? '').trim() ||
+      !Number.isFinite(Number(variante.precio)) ||
+      Number(variante.precio) <= 0
+    ) {
+      return res.status(400).json({
+        error: 'El SKU y un precio mayor que cero son obligatorios para crear el producto.',
+      });
+    }
+
+
     const producto = await prisma.productos.create({
       data: {
         categoria_id: categoriaId,
         nombre: nombreLimpio,
         descripcion: descripcionLimpia,
+        variantes: {
+          create: {
+            sku: String(variante.sku).trim().toUpperCase(),
+            talla: variante.talla
+              ? String(variante.talla).trim() || null
+              : null,
+            color: variante.color
+              ? String(variante.color).trim() || null
+              : null,
+            precio: Number(Number(variante.precio).toFixed(2)),
+          },
+        },
       },
       include: {
         categorias: true,
@@ -426,9 +437,22 @@ app.post('/productos', async (req, res) => {
       },
     });
 
+    publishSystemEvent({
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'PRODUCTO_CREADO',
+      entidad: 'producto',
+      entidad_id: producto.id.toString(),
+    });
+
     return res.status(201).json(producto);
   } catch (error) {
     console.error('Error al crear producto:', error);
+
+    if (error.code === 'P2002') {
+      return res.status(409).json({
+        error: 'Ya existe una variante con ese SKU',
+      });
+    }
 
     return res.status(500).json({
       error: 'No se pudo crear el producto',
@@ -522,6 +546,13 @@ app.put('/productos/:id', async (req, res) => {
       },
     });
 
+    publishSystemEvent({
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'PRODUCTO_MODIFICADO',
+      entidad: 'producto',
+      entidad_id: producto.id.toString(),
+    });
+
     return res.json(producto);
   } catch (error) {
     console.error('Error al actualizar producto:', error);
@@ -564,6 +595,14 @@ app.patch('/productos/:id/estado', async (req, res) => {
       },
     });
 
+    publishSystemEvent({
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'PRODUCTO_MODIFICADO',
+      entidad: 'producto',
+      entidad_id: producto.id.toString(),
+      metadata: { estado },
+    });
+
     return res.json(producto);
   } catch (error) {
     console.error('Error al cambiar el estado del producto:', error);
@@ -591,4 +630,3 @@ process.on('SIGTERM', async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
-

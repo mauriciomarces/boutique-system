@@ -61,3 +61,26 @@ backend/services/ai-service/models/**/*.joblib
 backend/services/ai-service/models/**/*.json
 backend/services/ai-service/metrics/*.json
 *.joblib
+# Local Python bytecode and caches
+__pycache__/
+*.py[cod]
+
+# Local backups and diagnostic artifacts
+*.bak
+*.backup-*
+/_tmp_*
+/backup-*.sql
+/consulta-*.sql
+/consulta-*.cjs
+/inspect-*.sql
+/verify-*.sql
+
+# Local integration audit evidence; keep outside Git
+/artifacts/integration-audit/
+
+# Additional backup filename variants
+*.bak-*
+*.backup
+
+# Respaldos históricos locales
+*.v1-backup

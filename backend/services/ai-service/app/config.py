@@ -65,5 +65,27 @@ FEATURE_COLUMNS = [
     "risk_rule_count",
 ]
 
+MODEL_FEATURE_COLUMNS = [
+    column
+    for column in FEATURE_COLUMNS
+    if column
+    not in {
+        "event_count_5m",
+        "event_count_10m",
+        "event_count_30m",
+        "events_per_minute",
+        "time_since_last_login",
+        "time_since_last_stock_change",
+        "time_since_last_price_change",
+        "failed_login_rule",
+        "cancellation_rule",
+        "stock_sale_rule",
+        "price_sale_rule",
+        "admin_activity_rule",
+        "combined_pattern_rule",
+        "risk_rule_count",
+    }
+]
+
 for directory in (RAW_DIR, PROCESSED_DIR, SYNTHETIC_DIR, MODELS_DIR, METRICS_DIR):
     directory.mkdir(parents=True, exist_ok=True)

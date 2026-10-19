@@ -3,6 +3,7 @@ from app.scenarios import (
     scenario_cancellations,
     scenario_failed_logins,
     scenario_normal_a,
+    scenario_normal_busy,
     scenario_price_then_sale,
     scenario_stock_then_sale,
 )
@@ -40,4 +41,19 @@ def test_stock_then_sale_rule():
 def test_price_then_sale_rule():
     rng = np.random.default_rng(0)
     features = extract_features(scenario_price_then_sale(5, rng, 2))
-    assert features["price_sale_rule"] == 1
+    assert features["price_sale_rule"] == 0
+    assert features["sales_after_price_change"] >= 1
+
+
+def test_high_frequency_normal_activity_is_not_an_anomaly_rule():
+    rng = np.random.default_rng(0)
+    features = extract_features(scenario_normal_busy(6, rng, 2))
+    assert features["events_per_minute"] > 5
+    assert features["risk_rule_count"] == 0
+
+
+def test_moderate_frequency_failed_logins_still_trigger_the_rule():
+    rng = np.random.default_rng(0)
+    features = extract_features(scenario_failed_logins(7, rng, 2))
+    assert features["events_per_minute"] < 2
+    assert features["failed_login_rule"] == 1

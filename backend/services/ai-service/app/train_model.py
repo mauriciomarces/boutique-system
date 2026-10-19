@@ -16,7 +16,8 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.dummy import DummyClassifier
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.tree import DecisionTreeClassifier, _tree
 
 from app.db import init_db, save_training_run
@@ -25,7 +26,7 @@ from app.config import (
     CURRENT_MODEL_PATH,
     DATASET_PATH,
     DEFAULT_TREE_PARAMS,
-    FEATURE_COLUMNS,
+    MODEL_FEATURE_COLUMNS,
     METRICS_DIR,
     MODELS_DIR,
 )
@@ -40,12 +41,73 @@ def load_dataset(path: Path | None = None) -> pd.DataFrame:
     if not dataset_path.exists():
         raise DatasetError(f"No existe el dataset: {dataset_path}")
     frame = pd.read_csv(dataset_path)
-    missing = [column for column in FEATURE_COLUMNS + ["label"] if column not in frame.columns]
+    missing = [column for column in MODEL_FEATURE_COLUMNS + ["label"] if column not in frame.columns]
     if missing:
         raise DatasetError(f"Columnas faltantes: {missing}")
     if frame["label"].isin([0, 1]).sum() != len(frame):
         raise DatasetError("label debe ser 0 (NORMAL) o 1 (ANOMALO)")
+    if "scenario" not in frame.columns:
+        raise DatasetError("scenario es obligatorio para separar familias de escenarios.")
+    if frame["scenario"].isna().any():
+        raise DatasetError("scenario no puede estar vacío.")
+    features = frame[MODEL_FEATURE_COLUMNS].apply(pd.to_numeric, errors="coerce")
+    if not np.isfinite(features.to_numpy(dtype=float)).all():
+        raise DatasetError("Las características deben contener números finitos.")
+    frame[MODEL_FEATURE_COLUMNS] = features
     return frame
+
+
+def grouped_scenario_split(
+    frame: pd.DataFrame,
+    test_size: float,
+    random_state: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    groups = frame["scenario"].astype(str)
+    labels_by_group = frame.assign(_group=groups).groupby("_group")["label"].nunique()
+    if (labels_by_group != 1).any():
+        raise DatasetError("Cada familia de escenario debe tener una única etiqueta.")
+
+    for seed in range(random_state, random_state + 100):
+        splitter = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
+        train_indices, test_indices = next(splitter.split(frame, frame["label"], groups))
+        if (
+            set(frame.iloc[train_indices]["label"]) == {0, 1}
+            and set(frame.iloc[test_indices]["label"]) == {0, 1}
+        ):
+            return train_indices, test_indices
+    raise DatasetError(
+        "No se pudo construir una evaluación agrupada con ambas clases en entrenamiento y prueba."
+    )
+
+
+def classification_metrics(y_true: pd.Series, y_pred: np.ndarray) -> dict[str, Any]:
+    return {
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "precision": float(precision_score(y_true, y_pred, average="binary", zero_division=0)),
+        "recall": float(recall_score(y_true, y_pred, average="binary", zero_division=0)),
+        "f1_score": float(f1_score(y_true, y_pred, average="binary", zero_division=0)),
+        "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        "precision_por_clase": {
+            "NORMAL": float(precision_score(y_true, y_pred, pos_label=0, zero_division=0)),
+            "ANOMALO": float(precision_score(y_true, y_pred, pos_label=1, zero_division=0)),
+        },
+        "recall_por_clase": {
+            "NORMAL": float(recall_score(y_true, y_pred, pos_label=0, zero_division=0)),
+            "ANOMALO": float(recall_score(y_true, y_pred, pos_label=1, zero_division=0)),
+        },
+        "f1_por_clase": {
+            "NORMAL": float(f1_score(y_true, y_pred, pos_label=0, zero_division=0)),
+            "ANOMALO": float(f1_score(y_true, y_pred, pos_label=1, zero_division=0)),
+        },
+        "confusion_matrix": confusion_matrix(y_true, y_pred, labels=[0, 1]).tolist(),
+        "classification_report": classification_report(
+            y_true,
+            y_pred,
+            target_names=["NORMAL", "ANOMALO"],
+            zero_division=0,
+            output_dict=True,
+        ),
+    }
 
 
 def train_decision_tree(
@@ -55,51 +117,41 @@ def train_decision_tree(
 ) -> dict[str, Any]:
     frame = load_dataset(dataset_path)
     tree_params = {**DEFAULT_TREE_PARAMS, **(params or {})}
-    x = frame[FEATURE_COLUMNS]
+    x = frame[MODEL_FEATURE_COLUMNS]
     y = frame["label"]
-    x_train, x_test, y_train, y_test = train_test_split(
-        x,
-        y,
-        test_size=0.25,
-        random_state=tree_params.get("random_state", 42),
-        stratify=y,
+    random_state = int(tree_params.get("random_state", 42))
+    train_indices, test_indices = grouped_scenario_split(frame, 0.25, random_state)
+    x_train, x_test = x.iloc[train_indices], x.iloc[test_indices]
+    y_train, y_test = y.iloc[train_indices], y.iloc[test_indices]
+    evaluation_model = DecisionTreeClassifier(**tree_params)
+    evaluation_model.fit(x_train, y_train)
+    y_pred = evaluation_model.predict(x_test)
+
+    metrics = classification_metrics(y_test, y_pred)
+    baseline = DummyClassifier(strategy="most_frequent")
+    baseline.fit(x_train, y_train)
+    baseline_metrics = classification_metrics(y_test, baseline.predict(x_test))
+    train_scenarios = sorted(frame.iloc[train_indices]["scenario"].astype(str).unique().tolist())
+    test_scenarios = sorted(frame.iloc[test_indices]["scenario"].astype(str).unique().tolist())
+    metrics.update(
+        {
+            "n_train": int(len(x_train)),
+            "n_test": int(len(x_test)),
+            "split_strategy": "GroupShuffleSplit por familia de escenario",
+            "scenario_groups_train": train_scenarios,
+            "scenario_groups_test": test_scenarios,
+            "baseline_most_frequent": baseline_metrics,
+            "f1_macro_delta_vs_baseline": float(
+                metrics["f1_macro"] - baseline_metrics["f1_macro"]
+            ),
+        }
     )
+
     model = DecisionTreeClassifier(**tree_params)
-    model.fit(x_train, y_train)
-    y_pred = model.predict(x_test)
-
-    metrics = {
-        "accuracy": float(accuracy_score(y_test, y_pred)),
-        "precision": float(precision_score(y_test, y_pred, average="binary", zero_division=0)),
-        "recall": float(recall_score(y_test, y_pred, average="binary", zero_division=0)),
-        "f1_score": float(f1_score(y_test, y_pred, average="binary", zero_division=0)),
-        "precision_por_clase": {
-            "NORMAL": float(precision_score(y_test, y_pred, pos_label=0, zero_division=0)),
-            "ANOMALO": float(precision_score(y_test, y_pred, pos_label=1, zero_division=0)),
-        },
-        "recall_por_clase": {
-            "NORMAL": float(recall_score(y_test, y_pred, pos_label=0, zero_division=0)),
-            "ANOMALO": float(recall_score(y_test, y_pred, pos_label=1, zero_division=0)),
-        },
-        "f1_por_clase": {
-            "NORMAL": float(f1_score(y_test, y_pred, pos_label=0, zero_division=0)),
-            "ANOMALO": float(f1_score(y_test, y_pred, pos_label=1, zero_division=0)),
-        },
-        "confusion_matrix": confusion_matrix(y_test, y_pred, labels=[0, 1]).tolist(),
-        "classification_report": classification_report(
-            y_test,
-            y_pred,
-            target_names=["NORMAL", "ANOMALO"],
-            zero_division=0,
-            output_dict=True,
-        ),
-        "n_train": int(len(x_train)),
-        "n_test": int(len(x_test)),
-    }
-
+    model.fit(x, y)
     importances = {
         column: float(value)
-        for column, value in zip(FEATURE_COLUMNS, model.feature_importances_)
+        for column, value in zip(MODEL_FEATURE_COLUMNS, model.feature_importances_)
     }
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -122,17 +174,20 @@ def train_decision_tree(
         "fecha_entrenamiento": trained_at,
         "algoritmo": "DecisionTreeClassifier",
         "parametros": tree_params,
-        "features": FEATURE_COLUMNS,
+        "features": MODEL_FEATURE_COLUMNS,
         "cantidad_registros": int(len(frame)),
-        "cantidad_features": len(FEATURE_COLUMNS),
+        "cantidad_features": len(MODEL_FEATURE_COLUMNS),
+        "modelo_final_entrenado_con_dataset_completo": True,
         "metricas": metrics,
         "feature_importances": importances,
         "model_path": str(model_path),
         "dataset_path": str(dataset_path or DATASET_PATH),
         "estado": "COMPLETADO",
         "nota_academica": (
-            "La clasificación es una señal de riesgo experimental. "
-            "No constituye prueba de fraude ni usa etiquetas reales de SposaBella."
+            "Etiquetas sintéticas asignadas por familia de escenario, no por registros "
+            "reales ni por reglas automáticas. El conjunto de prueba mantiene familias "
+            "completas fuera del entrenamiento; al ser datos sintéticos, no demuestra "
+            "generalización a actividad real ni constituye prueba de fraude."
         ),
     }
 
@@ -173,10 +228,14 @@ def load_current_metadata() -> dict[str, Any] | None:
     return json.loads(CURRENT_METADATA_PATH.read_text(encoding="utf-8"))
 
 
-def decision_path_conditions(model: DecisionTreeClassifier, sample: np.ndarray) -> list[str]:
+def decision_path_conditions(
+    model: DecisionTreeClassifier,
+    sample: pd.DataFrame | np.ndarray,
+) -> list[str]:
     tree = model.tree_
-    feature_names = FEATURE_COLUMNS
+    feature_names = getattr(model, "feature_names_in_", MODEL_FEATURE_COLUMNS)
     node_indicator = model.decision_path(sample)
+    sample_values = sample.to_numpy() if isinstance(sample, pd.DataFrame) else sample
     node_index = node_indicator.indices[node_indicator.indptr[0] : node_indicator.indptr[1]]
     conditions: list[str] = []
     for node_id in node_index:
@@ -184,7 +243,7 @@ def decision_path_conditions(model: DecisionTreeClassifier, sample: np.ndarray) 
             continue
         name = feature_names[tree.feature[node_id]]
         threshold = tree.threshold[node_id]
-        value = sample[0, tree.feature[node_id]]
+        value = sample_values[0, tree.feature[node_id]]
         if value <= threshold:
             conditions.append(f"{name} <= {threshold:.3f}")
         else:

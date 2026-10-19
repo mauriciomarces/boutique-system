@@ -22,10 +22,10 @@ Ver `data/README.md`.
 
 Etiqueta:
 
-- `label = 0` → escenario NORMAL (A, B, C)
-- `label = 1` → escenario ANÓMALO controlado (intentos fallidos, anulaciones, stock→venta, precio→venta, admin, ráfaga, combinado)
+- `label = 0` → escenarios sintéticos normales, incluidos alta actividad de ventas y salidas de inventario correctamente enlazadas a una venta.
+- `label = 1` → escenarios sintéticos controlados de intentos fallidos repetidos, anulaciones repetidas, actividad administrativa concentrada y combinación de señales deterministas.
 
-Las reglas lógicas pueden aparecer como indicadores (`*_rule`). **No** hay una feature `anomaly_detected` igual a la etiqueta.
+`label_source` documenta si la etiqueta procede de una familia sintética normal o anómala; no existen etiquetas verificadas de SposaBella. Los cambios de precio y la frecuencia alta pueden estar presentes como contexto, pero no etiquetan por sí solos un escenario como anómalo. Las familias completas se mantienen fuera de entrenamiento mediante `GroupShuffleSplit`; las métricas incluyen una referencia `most_frequent`, matriz de confusión, métricas por clase y F1 macro. Si las etiquetas dependen de las familias de escenarios, esta evaluación solo mide transferencia entre escenarios sintéticos y no generalización a datos reales.
 
 ## Entrenamiento manual
 
@@ -61,7 +61,7 @@ DecisionTreeClassifier(max_depth=5, min_samples_leaf=5, random_state=42)
 | GET | `/metrics` | Métricas actuales + evolución |
 | GET | `/model` | Metadatos del modelo actual |
 
-`POST /predict` usa `predict_proba` cuando el clasificador lo expone. La respuesta habla de **comportamiento clasificado como anómalo**, no de fraude confirmado.
+`POST /predict` acepta un `input_id` opcional y devuelve ese identificador junto con `model_version`, `predict_proba` y las condiciones exactas del camino del árbol. La respuesta habla de **comportamiento clasificado como anómalo**, no de fraude confirmado. Conteos, proporciones, valores finitos y banderas de regla se validan antes de llamar al modelo.
 
 ## Estructura
 

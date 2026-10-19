@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useMemo,
   useState,
@@ -279,7 +279,7 @@ function SalesPage() {
       parsedQuantity <= 0
     ) {
       setError(
-        "La cantidad debe ser un nÃºmero entero mayor que cero.",
+        "La cantidad debe ser un número entero mayor que cero.",
       );
       return;
     }
@@ -447,7 +447,7 @@ function SalesPage() {
 
     if (!paymentMethod.trim()) {
       setError(
-        "Ingresa el mÃ©todo de pago.",
+        "Ingresa el método de pago.",
       );
       return;
     }
@@ -554,7 +554,7 @@ function SalesPage() {
     }
 
     const confirmed = window.confirm(
-      `Â¿Deseas anular la venta #${sale.id}? Esta operaciÃ³n afectarÃ¡ el inventario.`,
+      `¿Deseas anular la venta #${sale.id}? Esta operación afectará el inventario.`,
     );
 
     if (!confirmed) {
@@ -651,7 +651,7 @@ function SalesPage() {
                 setSidebarOpen(true)
               }
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border theme-border bg-[var(--bg)] theme-text shadow-lg lg:hidden"
-              aria-label="Abrir menÃº de administraciÃ³n"
+              aria-label="Abrir menú de administración"
               aria-expanded={sidebarOpen}
             >
               <svg
@@ -678,7 +678,7 @@ function SalesPage() {
               </p>
 
               <p className="mt-0.5 text-[9px] uppercase tracking-[0.2em] theme-text-muted">
-                Centro de gestiÃ³n
+                Centro de gestión
               </p>
             </Link>
           </div>
@@ -688,7 +688,7 @@ function SalesPage() {
             to="/administracion"
             className="rounded-xl border theme-border px-4 py-2 text-sm font-semibold theme-text"
           >
-            AdministraciÃ³n
+            Administración
           </Link>
             <LogoutButton />
           </div>
@@ -707,7 +707,7 @@ function SalesPage() {
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#5b9279]">
-                GestiÃ³n comercial
+                Gestión comercial
               </p>
 
               <h1 className="mt-2 text-3xl font-semibold theme-text">
@@ -740,7 +740,7 @@ function SalesPage() {
                 className="shrink-0 text-lg font-semibold leading-none text-red-500"
                 aria-label="Cerrar mensaje de error"
               >
-                Ã—
+                ×
               </button>
             </div>
           )}
@@ -755,7 +755,7 @@ function SalesPage() {
                 className="shrink-0 text-lg font-semibold leading-none text-green-600"
                 aria-label="Cerrar mensaje"
               >
-                Ã—
+                ×
               </button>
             </div>
           )}
@@ -800,7 +800,7 @@ function SalesPage() {
                 placeholder={
                   activeTab === "ventas"
                     ? "Buscar venta o cliente"
-                    : "Buscar transacciÃ³n"
+                    : "Buscar transacción"
                 }
                 className="w-full rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-2.5 text-sm theme-text lg:w-80"
               />
@@ -808,7 +808,7 @@ function SalesPage() {
 
             {loading ? (
               <div className="p-8 text-sm theme-text-soft">
-                Cargando informaciÃ³n...
+                Cargando información...
               </div>
             ) : activeTab === "ventas" ? (
               visibleSales.length === 0 ? (
@@ -904,34 +904,28 @@ function SalesPage() {
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    void openDetail(
-                                      sale,
-                                    )
-                                  }
+                                  onClick={() => void openDetail(sale)}
                                   className="rounded-lg border theme-border px-3 py-1.5 text-xs font-semibold theme-text"
                                 >
                                   Ver
                                 </button>
 
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void handleRefreshCancellation(sale)
-                                  }
-                                  className="rounded-lg border theme-border px-3 py-1.5 text-xs font-semibold theme-text"
-                                >
-                                  Estado anulación
-                                </button>
+                                {sale.estado === "ANULADA" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleRefreshCancellation(sale)}
+                                    className="rounded-lg border theme-border px-3 py-1.5 text-xs font-semibold theme-text"
+                                  >
+                                    Estado de anulación
+                                  </button>
+                                )}
 
-                                {cancellationOperations[sale.id] &&
-                                  cancellationOperations[sale.id].estado !==
-                                    "COMPLETADA" && (
+                                {sale.estado === "ANULADA" &&
+                                  cancellationOperations[sale.id] &&
+                                  cancellationOperations[sale.id].estado !== "COMPLETADA" && (
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        void handleRetryCancellation(sale)
-                                      }
+                                      onClick={() => void handleRetryCancellation(sale)}
                                       disabled={saving}
                                       className="rounded-lg border theme-border px-3 py-1.5 text-xs font-semibold theme-text disabled:opacity-50"
                                     >
@@ -939,37 +933,37 @@ function SalesPage() {
                                     </button>
                                   )}
 
-                                {sale.estado ===
-                                  "CONFIRMADA" && (
-                                  <>
+                                {sale.estado === "CONFIRMADA" &&
+                                  Number(sale.total) -
+                                    sale.pagos
+                                      .filter((payment) =>
+                                        payment.estado === "PAGADO" ||
+                                        payment.estado === "PENDIENTE"
+                                      )
+                                      .reduce((sum, payment) => sum + Number(payment.monto), 0) > 0 && (
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        openPayment(
-                                          sale,
-                                        )
-                                      }
+                                      onClick={() => openPayment(sale)}
                                       className="rounded-lg border border-[#6cad91] px-3 py-1.5 text-xs font-semibold text-[#47745f]"
                                     >
                                       Pago
                                     </button>
+                                  )}
 
+                                {sale.estado === "CONFIRMADA" &&
+                                  !sale.pagos.some((payment) =>
+                                    payment.estado === "PAGADO" ||
+                                    payment.estado === "PENDIENTE"
+                                  ) && (
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        void handleCancelSale(
-                                          sale,
-                                        )
-                                      }
-                                      disabled={
-                                        saving
-                                      }
+                                      onClick={() => void handleCancelSale(sale)}
+                                      disabled={saving}
                                       className="rounded-lg border border-[#d49a9a] px-3 py-1.5 text-xs font-semibold text-[#9c5c5c] disabled:opacity-50"
                                     >
                                       Anular
                                     </button>
-                                  </>
-                                )}
+                                  )}
                               </div>
                             </td>
                           </tr>
@@ -1012,7 +1006,7 @@ function SalesPage() {
                     <thead className="bg-[var(--bg-secondary)] theme-text-soft">
                       <tr>
                         <th className="px-5 py-4 font-medium">
-                          TransacciÃ³n
+                          Transacción
                         </th>
 
                         <th className="px-5 py-4 font-medium">
@@ -1020,7 +1014,7 @@ function SalesPage() {
                         </th>
 
                         <th className="px-5 py-4 font-medium">
-                          MÃ©todo
+                          Método
                         </th>
 
                         <th className="px-5 py-4 font-medium">
@@ -1157,7 +1151,7 @@ function SalesPage() {
                 className="text-2xl theme-text-muted"
                 aria-label="Cerrar"
               >
-                Ã—
+                ×
               </button>
             </div>
 
@@ -1224,13 +1218,13 @@ function SalesPage() {
                         key={variant.id}
                         value={variant.id}
                       >
-                        {product.nombre} Â·{" "}
-                        {variant.sku} Â·{" "}
+                        {product.nombre} ·{" "}
+                        {variant.sku} ·{" "}
                         {variant.talla ||
                           "Sin talla"}{" "}
-                        Â·{" "}
+                        ·{" "}
                         {variant.color ||
-                          "Sin color"} Â·{" "}
+                          "Sin color"} ·{" "}
                         {formatMoney(
                           variant.precio,
                         )}
@@ -1258,13 +1252,13 @@ function SalesPage() {
                         selectedVariant.variant
                           .sku
                       }{" "}
-                      Â· Talla{" "}
+                      · Talla{" "}
                       {
                         selectedVariant.variant
                           .talla ||
                           "Sin talla"
                       }{" "}
-                      Â· Color{" "}
+                      · Color{" "}
                       {
                         selectedVariant.variant
                           .color ||
@@ -1354,7 +1348,7 @@ function SalesPage() {
                       </th>
 
                       <th className="px-4 py-3 font-medium">
-                        AcciÃ³n
+                        Acción
                       </th>
                     </tr>
                   </thead>
@@ -1370,8 +1364,8 @@ function SalesPage() {
                         </td>
 
                         <td className="px-4 py-3 theme-text-soft">
-                          {item.sku} Â·{" "}
-                          {item.talla} Â·{" "}
+                          {item.sku} ·{" "}
+                          {item.talla} ·{" "}
                           {item.color}
                         </td>
 
@@ -1490,7 +1484,7 @@ function SalesPage() {
                   className="text-2xl theme-text-muted disabled:opacity-40"
                   aria-label="Cerrar"
                 >
-                  Ã—
+                  ×
                 </button>
               </div>
 
@@ -1514,31 +1508,26 @@ function SalesPage() {
                     htmlFor="payment-method"
                     className="mb-1.5 block text-sm font-medium theme-text"
                   >
-                    MÃ©todo de pago
+                    Método de pago
                   </label>
 
-                  <input
+                  <select
                     id="payment-method"
                     required
-                    maxLength={50}
                     value={paymentMethod}
-                    onChange={(event) =>
-                      setPaymentMethod(
-                        event.target.value
-                          .replace(
-                            /\s+/g,
-                            " ",
-                          )
-                          .slice(0, 50),
-                      )
-                    }
-                    placeholder="Ej. EFECTIVO"
-                    className="w-full rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-3 text-sm uppercase theme-text"
-                  />
+                    onChange={(event) => setPaymentMethod(event.target.value)}
+                    className="w-full rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text"
+                  >
+                    <option value="">Selecciona un método</option>
+                    <option value="EFECTIVO">Efectivo</option>
+                    <option value="QR">QR</option>
+                    <option value="TRANSFERENCIA">Transferencia bancaria</option>
+                    <option value="TARJETA">Tarjeta</option>
+                  </select>
 
                   <p className="mt-1 text-xs theme-text-muted">
-                    Se normalizarÃ¡ automÃ¡ticamente
-                    a mayÃºsculas.
+                    Se normalizará automáticamente
+                    a mayúsculas.
                   </p>
                 </div>
 
@@ -1614,7 +1603,7 @@ function SalesPage() {
                   className="text-2xl theme-text-muted"
                   aria-label="Cerrar"
                 >
-                  Ã—
+                  ×
                 </button>
               </div>
 

@@ -31,6 +31,16 @@ export interface ProductVariant {
   estado: ProductStatus;
 }
 
+export interface ProductVariantForm {
+  clientKey: string;
+  id?: string;
+  sku: string;
+  talla: string;
+  color: string;
+  precio: string;
+  estado: ProductStatus;
+}
+
 export interface CategoryForm {
   nombre: string;
   descripcion: string;
@@ -40,6 +50,10 @@ export interface ProductForm {
   categoria_id: string;
   nombre: string;
   descripcion: string;
+  sku: string;
+  talla: string;
+  color: string;
+  precio: string;
 }
 
 export interface ApiListResponse<T> {
