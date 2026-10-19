@@ -1,13 +1,21 @@
 from fastapi.testclient import TestClient
+import numpy as np
 
 from app.db import init_db
+from app import main as main_module
 from app.main import app
 from app.dataset import write_datasets
 from app.train_model import train_decision_tree
-from app.db import save_training_run
+from app.config import FEATURE_COLUMNS
+from app.features import extract_features
+from app.scenarios import ANOMALY_SCENARIOS, NORMAL_SCENARIOS
 
 
 client = TestClient(app)
+
+def feature_payload(**overrides):
+    return {**{name: 0 for name in FEATURE_COLUMNS}, **overrides}
+
 
 
 def test_health():
@@ -34,46 +42,73 @@ def test_train_predict_normal_and_anomalo():
     assert client.get("/metrics").status_code == 200
     assert client.get("/model").status_code == 200
 
+    normal_features = extract_features(
+        NORMAL_SCENARIOS["normal_busy"](42, np.random.default_rng(42), 4)
+    )
     normal = client.post(
         "/predict",
-        json={
-            "event_count_10m": 4,
-            "failed_login_count": 0,
-            "failed_login_ratio": 0,
-            "sales_count": 2,
-            "cancelled_sales_count": 0,
-            "cancellation_ratio": 0,
-            "stock_change_count": 0,
-            "price_change_count": 0,
-            "admin_action_count": 0,
-            "events_per_minute": 0.3,
-        },
+        json={**normal_features, "input_id": "analysis-normal-high-volume"},
     )
     assert normal.status_code == 200
-    assert normal.json()["clasificacion"] in {"NORMAL", "ANOMALO"}
+    assert normal.json()["clasificacion"] == "NORMAL"
+    assert normal.json()["input_id"] == "analysis-normal-high-volume"
     assert "fraude confirmado" not in normal.json()["interpretacion"].lower()
+
+    cancellation_features = extract_features(
+        ANOMALY_SCENARIOS["cancellations"](43, np.random.default_rng(43), 4)
+    )
+    cancellation = client.post(
+        "/predict",
+        json={**cancellation_features, "input_id": "analysis-moderate-cancellations"},
+    )
+    assert cancellation.status_code == 200
+    assert cancellation.json()["clasificacion"] == "ANOMALO"
+    assert cancellation.json()["input_id"] == "analysis-moderate-cancellations"
 
     anomalo = client.post(
         "/predict",
         json={
-            "event_count_10m": 12,
-            "failed_login_count": 6,
-            "failed_login_ratio": 0.8,
-            "sales_count": 5,
-            "cancelled_sales_count": 3,
-            "cancellation_ratio": 0.6,
-            "stock_change_count": 2,
-            "price_change_count": 1,
-            "admin_action_count": 0,
-            "events_per_minute": 6,
-            "failed_login_rule": 1,
-            "cancellation_rule": 1,
-            "combined_pattern_rule": 1,
-            "risk_rule_count": 3,
+            **extract_features(
+                ANOMALY_SCENARIOS["failed_logins"](44, np.random.default_rng(44), 4)
+            ),
+            "input_id": "analysis-failed-logins",
         },
     )
     assert anomalo.status_code == 200
     payload = anomalo.json()
-    assert payload["clasificacion"] in {"NORMAL", "ANOMALO"}
+    assert payload["clasificacion"] == "ANOMALO"
     assert "factores" in payload
     assert "nivel_riesgo" in payload
+    assert payload["model_version"]
+    assert "sintéticos" in payload["probability_semantics"]
+    assert payload["input_id"] == "analysis-failed-logins"
+
+    negative_count = client.post(
+        "/predict",
+        json=feature_payload(event_count_10m=-1),
+    )
+    assert negative_count.status_code == 400
+
+    invalid_rule = client.post(
+        "/predict",
+        json=feature_payload(failed_login_rule=2),
+    )
+    assert invalid_rule.status_code == 400
+
+
+def test_predict_rejects_missing_required_features():
+    init_db()
+    response = client.post("/predict", json={"event_count_10m": 1})
+    assert response.status_code == 400
+    assert "Faltan características obligatorias" in response.json()["detail"]
+
+
+def test_predict_rejects_unknown_model_class(monkeypatch):
+    class UnknownClassModel:
+        def predict(self, _values):
+            return np.array([2])
+
+    monkeypatch.setattr(main_module, "load_current_model", lambda: UnknownClassModel())
+    response = client.post("/predict", json=feature_payload())
+    assert response.status_code == 503
+    assert response.json()["detail"] == "El modelo devolvió una clase desconocida."

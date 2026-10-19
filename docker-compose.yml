@@ -41,6 +41,7 @@ services:
       NOTIFICATIONS_SERVICE_URL: http://notifications-service:4006
       LOGIC_CORRELATION_SERVICE_URL: http://logic-correlation-service:4007
       AI_SERVICE_URL: http://ai-service:4008
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?Configura INTERNAL_SERVICE_SECRET en .env}
     volumes:
       - ./backend/gateway:/app/backend/gateway
       - /app/backend/gateway/node_modules
@@ -67,8 +68,8 @@ services:
     environment:
       PORT: 4002
       NODE_ENV: development
-      JWT_ACCESS_SECRET: &jwt_access_secret change-this-development-secret
-      INTERNAL_SERVICE_SECRET: &internal_service_secret ${INTERNAL_SERVICE_SECRET:-change-this-internal-dev-secret}
+      JWT_ACCESS_SECRET: &jwt_access_secret ${JWT_ACCESS_SECRET:?Configura JWT_ACCESS_SECRET en .env}
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?Configura INTERNAL_SERVICE_SECRET en .env}
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN_DAYS: 7
       DATABASE_URL: mysql://boutique:secret@mysql-users:3306/boutique_users
@@ -76,8 +77,12 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-SposaBellaAdmin2026!}
       ADMIN_NAME: ${ADMIN_NAME:-Administrador}
       ADMIN_LAST_NAME: ${ADMIN_LAST_NAME:-SposaBella}
+      SYSTEM_EVENT_SERVICE: users-service
+      CORRELATION_SERVICE_URL: http://logic-correlation-service:4007
+      EVENT_OUTBOX_PATH: /var/lib/boutique-events/outbox.json
     volumes:
       - ./backend/services/users-service/src:/app/backend/services/users-service/src
+      - users-event-outbox:/var/lib/boutique-events
     ports:
       - "4002:4002"
     depends_on:
@@ -96,12 +101,21 @@ services:
     restart: unless-stopped
     environment:
       PORT: 4003
+      USERS_SERVICE_URL: http://users-service:4002
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?Configura INTERNAL_SERVICE_SECRET en .env}
+      SYSTEM_EVENT_SERVICE: products-service
+      CORRELATION_SERVICE_URL: http://logic-correlation-service:4007
+      EVENT_OUTBOX_PATH: /var/lib/boutique-events/outbox.json
       DATABASE_URL: mysql://boutique:secret@mysql-products:3306/boutique_products
     ports:
       - "4003:4003"
+    volumes:
+      - products-event-outbox:/var/lib/boutique-events
     depends_on:
       mysql-products:
         condition: service_healthy
+      users-service:
+        condition: service_started
     networks:
       - boutique-network
 
@@ -116,11 +130,16 @@ services:
     environment:
       PORT: 4004
       USERS_SERVICE_URL: http://users-service:4002
-      INTERNAL_SERVICE_SECRET: *internal_service_secret
-      SALES_INVENTORY_INTERNAL_SECRET: &sales_inventory_internal_secret "${SALES_INVENTORY_INTERNAL_SECRET:?Configure SALES_INVENTORY_INTERNAL_SECRET in .env}"
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?Configura INTERNAL_SERVICE_SECRET en .env}
+      SYSTEM_EVENT_SERVICE: inventory-service
+      CORRELATION_SERVICE_URL: http://logic-correlation-service:4007
+      EVENT_OUTBOX_PATH: /var/lib/boutique-events/outbox.json
+      SALES_INVENTORY_INTERNAL_SECRET: "${SALES_INVENTORY_INTERNAL_SECRET:?Configure SALES_INVENTORY_INTERNAL_SECRET in .env}"
       DATABASE_URL: mysql://boutique:secret@mysql-inventory:3306/boutique_inventory
     ports:
       - "4004:4004"
+    volumes:
+      - inventory-event-outbox:/var/lib/boutique-events
     depends_on:
       mysql-inventory:
         condition: service_healthy
@@ -138,11 +157,16 @@ services:
     environment:
       PORT: 4005
       USERS_SERVICE_URL: http://users-service:4002
-      INTERNAL_SERVICE_SECRET: *internal_service_secret
-      SALES_INVENTORY_INTERNAL_SECRET: *sales_inventory_internal_secret
+      INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?Configura INTERNAL_SERVICE_SECRET en .env}
+      SALES_INVENTORY_INTERNAL_SECRET: ${SALES_INVENTORY_INTERNAL_SECRET:?Configura SALES_INVENTORY_INTERNAL_SECRET en .env}
+      SYSTEM_EVENT_SERVICE: sales-service
+      CORRELATION_SERVICE_URL: http://logic-correlation-service:4007
+      EVENT_OUTBOX_PATH: /var/lib/boutique-events/outbox.json
       DATABASE_URL: mysql://boutique:secret@mysql-sales:3306/boutique_sales
     ports:
       - "4005:4005"
+    volumes:
+      - sales-event-outbox:/var/lib/boutique-events
     depends_on:
       mysql-sales:
         condition: service_healthy
@@ -292,10 +316,10 @@ services:
       PORT: 4007
       NODE_ENV: development
       AI_SERVICE_URL: http://ai-service:4008
+      CORRELATION_DATA_DIR: /app/backend/services/logic-correlation-service/data
     volumes:
       - ./backend/services/logic-correlation-service/src:/app/backend/services/logic-correlation-service/src
-    ports:
-      - "4007:4007"
+      - logic-correlation-data:/app/backend/services/logic-correlation-service/data
     networks:
       - boutique-network
 
@@ -318,8 +342,6 @@ services:
       - ./backend/services/ai-service/metrics:/app/metrics
       - ./backend/services/ai-service/generate_dataset.py:/app/generate_dataset.py
       - ./backend/services/ai-service/train.py:/app/train.py
-    ports:
-      - "4008:4008"
     depends_on:
       mysql-ai:
         condition: service_healthy
@@ -376,4 +398,9 @@ volumes:
   sales-db-data:
   notifications-db-data:
   ai-db-data:
+  logic-correlation-data:
+  users-event-outbox:
+  products-event-outbox:
+  inventory-event-outbox:
+  sales-event-outbox:
   frontend-node-modules:

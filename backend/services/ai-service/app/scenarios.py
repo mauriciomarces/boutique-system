@@ -14,9 +14,25 @@ def make_event(
     resultado: str = "EXITOSO",
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    service = {
+        "LOGIN": "users-service",
+        "LOGOUT": "users-service",
+        "LOGIN_FALLIDO": "users-service",
+        "USUARIO_CREADO": "users-service",
+        "USUARIO_MODIFICADO": "users-service",
+        "USUARIO_DESACTIVADO": "users-service",
+        "CAMBIO_ROL": "users-service",
+        "VENTA_CREADA": "sales-service",
+        "VENTA_ANULADA": "sales-service",
+        "PAGO_REGISTRADO": "sales-service",
+        "STOCK_MODIFICADO": "inventory-service",
+        "PRECIO_MODIFICADO": "products-service",
+        "PRODUCTO_CREADO": "products-service",
+        "PRODUCTO_MODIFICADO": "products-service",
+    }.get(tipo_evento, "users-service")
     return {
         "event_id": str(uuid4()),
-        "service": "synthetic-generator",
+        "service": service,
         "usuario_id": usuario_id,
         "tipo_evento": tipo_evento,
         "entidad": entidad,
@@ -60,19 +76,44 @@ def scenario_normal_c(usuario_id: int, rng, quantity_ref: int) -> list[dict[str,
     t = _base(usuario_id)
     return [
         make_event(usuario_id, "LOGIN", t),
-        make_event(usuario_id, "PRODUCTO_MODIFICADO", t + timedelta(minutes=5), "producto", 50, metadata={"campo": "descripcion"}),
+        make_event(
+            usuario_id,
+            "PRECIO_MODIFICADO",
+            t + timedelta(minutes=5),
+            "variante_producto",
+            50,
+            metadata={"precio_anterior": 10, "precio_nuevo": 12},
+        ),
         make_event(usuario_id, "VENTA_CREADA", t + timedelta(minutes=12), "venta", 120, metadata={"quantity_ref": quantity_ref}),
         make_event(usuario_id, "LOGOUT", t + timedelta(minutes=18)),
     ]
 
 
+def scenario_normal_busy(usuario_id: int, rng, quantity_ref: int) -> list[dict[str, Any]]:
+    t = _base(usuario_id)
+    events = [make_event(usuario_id, "LOGIN", t)]
+    for index in range(12):
+        events.append(
+            make_event(
+                usuario_id,
+                "VENTA_CREADA",
+                t + timedelta(seconds=5 * (index + 1)),
+                "venta",
+                130 + index,
+                metadata={"quantity_ref": quantity_ref},
+            )
+        )
+    events.append(make_event(usuario_id, "LOGOUT", t + timedelta(minutes=2)))
+    return events
+
+
 def scenario_failed_logins(usuario_id: int, rng, _quantity_ref: int) -> list[dict[str, Any]]:
     t = _base(usuario_id)
     events = [
-        make_event(usuario_id, "LOGIN_FALLIDO", t + timedelta(minutes=i), resultado="FALLIDO")
+        make_event(usuario_id, "LOGIN_FALLIDO", t + timedelta(minutes=1 + 2 * i), resultado="FALLIDO")
         for i in range(5 + int(rng.integers(0, 2)))
     ]
-    events.append(make_event(usuario_id, "LOGIN", t + timedelta(minutes=8)))
+    events.append(make_event(usuario_id, "LOGIN", t + timedelta(minutes=11)))
     return events
 
 
@@ -107,9 +148,19 @@ def scenario_stock_then_sale(usuario_id: int, rng, quantity_ref: int) -> list[di
     t = _base(usuario_id)
     return [
         make_event(usuario_id, "LOGIN", t),
-        make_event(usuario_id, "STOCK_MODIFICADO", t + timedelta(minutes=1), "producto", 9),
-        make_event(usuario_id, "STOCK_MODIFICADO", t + timedelta(minutes=2), "producto", 9),
         make_event(usuario_id, "VENTA_CREADA", t + timedelta(minutes=4), "venta", 300, metadata={"quantity_ref": quantity_ref}),
+        make_event(
+            usuario_id,
+            "STOCK_MODIFICADO",
+            t + timedelta(minutes=4, milliseconds=270),
+            "variante_producto",
+            9,
+            metadata={
+                "tipo_movimiento": "SALIDA",
+                "referencia_tipo": "VENTA",
+                "venta_id": "300",
+            },
+        ),
         make_event(usuario_id, "LOGOUT", t + timedelta(minutes=8)),
     ]
 
@@ -158,33 +209,52 @@ def scenario_burst(usuario_id: int, rng, quantity_ref: int) -> list[dict[str, An
 
 def scenario_combined(usuario_id: int, rng, quantity_ref: int) -> list[dict[str, Any]]:
     t = _base(usuario_id)
-    return [
-        make_event(usuario_id, "LOGIN_FALLIDO", t, resultado="FALLIDO"),
-        make_event(usuario_id, "LOGIN_FALLIDO", t + timedelta(minutes=1), resultado="FALLIDO"),
-        make_event(usuario_id, "LOGIN_FALLIDO", t + timedelta(minutes=2), resultado="FALLIDO"),
-        make_event(usuario_id, "LOGIN_FALLIDO", t + timedelta(minutes=3), resultado="FALLIDO"),
-        make_event(usuario_id, "LOGIN_FALLIDO", t + timedelta(minutes=4), resultado="FALLIDO"),
-        make_event(usuario_id, "LOGIN", t + timedelta(minutes=5)),
-        make_event(usuario_id, "STOCK_MODIFICADO", t + timedelta(minutes=6), "producto", 12),
-        make_event(usuario_id, "PRECIO_MODIFICADO", t + timedelta(minutes=7), "producto", 12),
-        make_event(usuario_id, "VENTA_CREADA", t + timedelta(minutes=8), "venta", 500, metadata={"quantity_ref": quantity_ref}),
-        make_event(usuario_id, "VENTA_ANULADA", t + timedelta(minutes=9), "venta", 500),
-        make_event(usuario_id, "VENTA_CREADA", t + timedelta(minutes=10), "venta", 501, metadata={"quantity_ref": quantity_ref}),
+    events = [
+        make_event(
+            usuario_id,
+            "LOGIN_FALLIDO",
+            t + timedelta(minutes=1.2 * index),
+            resultado="FALLIDO",
+        )
+        for index in range(5)
     ]
+    events.append(make_event(usuario_id, "LOGIN", t + timedelta(minutes=5.5)))
+    for index in range(3):
+        sale_id = 500 + index
+        sale_time = t + timedelta(minutes=6 + index)
+        events.append(
+            make_event(
+                usuario_id,
+                "VENTA_CREADA",
+                sale_time,
+                "venta",
+                sale_id,
+                metadata={"quantity_ref": quantity_ref},
+            )
+        )
+        events.append(
+            make_event(
+                usuario_id,
+                "VENTA_ANULADA",
+                sale_time + timedelta(seconds=30),
+                "venta",
+                sale_id,
+            )
+        )
+    return events
 
 
 NORMAL_SCENARIOS = {
     "normal_a": scenario_normal_a,
     "normal_b": scenario_normal_b,
     "normal_c": scenario_normal_c,
+    "normal_busy": scenario_normal_busy,
+    "normal_sale_inventory_link": scenario_stock_then_sale,
 }
 
 ANOMALY_SCENARIOS = {
     "failed_logins": scenario_failed_logins,
     "cancellations": scenario_cancellations,
-    "stock_then_sale": scenario_stock_then_sale,
-    "price_then_sale": scenario_price_then_sale,
     "admin_burst": scenario_admin_burst,
-    "time_burst": scenario_burst,
     "combined": scenario_combined,
 }

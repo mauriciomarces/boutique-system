@@ -29,7 +29,18 @@ def _ts(event: dict[str, Any]) -> datetime:
 
 
 def sort_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(events, key=lambda item: (_ts(item), str(item.get("event_id", ""))))
+    ordered = sorted(events, key=lambda item: (_ts(item), str(item.get("event_id", ""))))
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for event in ordered:
+        event_id = event.get("event_id")
+        if event_id is not None:
+            normalized_id = str(event_id)
+            if normalized_id in seen:
+                continue
+            seen.add(normalized_id)
+        unique.append(event)
+    return unique
 
 
 def window_events(events: list[dict[str, Any]], reference: datetime, minutes: int) -> list[dict[str, Any]]:
@@ -38,7 +49,16 @@ def window_events(events: list[dict[str, Any]], reference: datetime, minutes: in
 
 
 def count_type(events: list[dict[str, Any]], tipo: str) -> int:
-    return sum(1 for event in events if event["tipo_evento"] == tipo)
+    return sum(
+        1
+        for event in events
+        if event["tipo_evento"] == tipo
+        and (
+            event.get("resultado") == "FALLIDO"
+            if tipo == "LOGIN_FALLIDO"
+            else event.get("resultado") != "FALLIDO"
+        )
+    )
 
 
 def minutes_since(events: list[dict[str, Any]], tipos: set[str], reference: datetime) -> float:
@@ -60,20 +80,83 @@ def count_preceded_by(
         if current["tipo_evento"] != target:
             continue
         current_ts = _ts(current)
+        if current.get("resultado") == "FALLIDO":
+            continue
         if any(
             prev["tipo_evento"] == precursor
-            and timedelta(0) <= current_ts - _ts(prev) <= max_gap
+            and prev.get("resultado") != "FALLIDO"
+            and (
+                current.get("usuario_id") is None
+                or prev.get("usuario_id") is None
+                or str(current["usuario_id"]) == str(prev["usuario_id"])
+            )
+            and timedelta(0) <= current_ts - _ts(prev) < max_gap
             for prev in events[:index]
         ):
             count += 1
     return count
 
 
+def linked_stock_sales(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sales = [
+        event
+        for event in events
+        if event.get("tipo_evento") == "VENTA_CREADA"
+        and event.get("resultado") != "FALLIDO"
+        and event.get("entidad") == "venta"
+        and event.get("entidad_id") is not None
+    ]
+    movements = [
+        event
+        for event in events
+        if event.get("tipo_evento") == "STOCK_MODIFICADO"
+        and event.get("resultado") != "FALLIDO"
+        and isinstance(event.get("metadata"), dict)
+        and event["metadata"].get("referencia_tipo") == "VENTA"
+        and event["metadata"].get("tipo_movimiento") == "SALIDA"
+        and event["metadata"].get("venta_id") is not None
+    ]
+    links: list[dict[str, Any]] = []
+
+    for movement in movements:
+        movement_sale_id = str(movement["metadata"]["venta_id"])
+        for sale in sales:
+            sale_id = str(sale["entidad_id"])
+            if sale_id != movement_sale_id:
+                continue
+            sale_actor = sale.get("usuario_id")
+            movement_actor = movement.get("usuario_id")
+            if (
+                sale_actor is not None
+                and movement_actor is not None
+                and str(sale_actor) != str(movement_actor)
+            ):
+                continue
+            if abs(_ts(sale) - _ts(movement)) >= STOCK_SALE_WINDOW:
+                continue
+            links.append(
+                {
+                    "venta_id": sale_id,
+                    "sale_event_id": sale.get("event_id"),
+                    "stock_event_id": movement.get("event_id"),
+                    "variante_producto_id": (
+                        None
+                        if movement.get("entidad_id") is None
+                        else str(movement["entidad_id"])
+                    ),
+                }
+            )
+            break
+
+    return links
+
+
 def unique_entities(events: list[dict[str, Any]]) -> int:
     values = {
         f"{event.get('entidad')}:{event.get('entidad_id')}"
         for event in events
-        if event.get("entidad_id") is not None
+        if event.get("resultado") != "FALLIDO"
+        and event.get("entidad_id") is not None
     }
     return len(values)
 
@@ -85,19 +168,30 @@ def analyze_rules(
 ) -> dict[str, dict[str, Any]]:
     failed_10m = count_type(events_10m, "LOGIN_FALLIDO")
     cancelled_30m = count_type(events_30m, "VENTA_ANULADA")
-    admin_10m = sum(1 for event in events_10m if event["tipo_evento"] in ADMIN_TYPES)
+    admin_10m = sum(
+        1
+        for event in events_10m
+        if event.get("resultado") != "FALLIDO" and event["tipo_evento"] in ADMIN_TYPES
+    )
     r1 = failed_10m >= 5
     r2 = cancelled_30m >= 3
-    r3 = count_preceded_by(events_all, "VENTA_CREADA", "STOCK_MODIFICADO", STOCK_SALE_WINDOW) > 0
-    r4 = count_preceded_by(events_all, "VENTA_CREADA", "PRECIO_MODIFICADO", PRICE_SALE_WINDOW) > 0
+    stock_links = linked_stock_sales(events_all)
+    r3 = len(stock_links) > 0
+    sales_after_price_change = count_preceded_by(
+        events_all,
+        "VENTA_CREADA",
+        "PRECIO_MODIFICADO",
+        PRICE_SALE_WINDOW,
+    )
+    r4 = False
     r5 = admin_10m >= 3
-    fired = sum([r1, r2, r3, r4, r5])
+    fired = sum([r1, r2, r5])
     r6 = fired >= 2
     return {
         "R1": {"fired": r1, "value": failed_10m},
         "R2": {"fired": r2, "value": cancelled_30m},
-        "R3": {"fired": r3, "value": int(r3)},
-        "R4": {"fired": r4, "value": int(r4)},
+        "R3": {"fired": r3, "value": len(stock_links)},
+        "R4": {"fired": r4, "value": sales_after_price_change},
         "R5": {"fired": r5, "value": admin_10m},
         "R6": {"fired": r6, "value": fired},
     }
@@ -121,6 +215,7 @@ def extract_features(events_input: list[dict[str, Any]], reference: datetime | N
     cancelled_sales_count = count_type(events_30m, "VENTA_ANULADA")
     sale_ops = sales_count + cancelled_sales_count
     rules = analyze_rules(events_10m, events_30m, events)
+    stock_links = linked_stock_sales(events)
 
     return {
         "event_count_5m": float(len(events_5m)),
@@ -134,12 +229,22 @@ def extract_features(events_input: list[dict[str, Any]], reference: datetime | N
         "cancellation_ratio": cancelled_sales_count / sale_ops if sale_ops else 0.0,
         "stock_change_count": float(count_type(events_30m, "STOCK_MODIFICADO")),
         "price_change_count": float(count_type(events_30m, "PRECIO_MODIFICADO")),
-        "admin_action_count": float(sum(1 for event in events_10m if event["tipo_evento"] in ADMIN_TYPES)),
-        "role_change_count": float(count_type(events_10m, "CAMBIO_ROL")),
-        "user_change_count": float(sum(1 for event in events_10m if event["tipo_evento"] in USER_CHANGE_TYPES)),
-        "sales_after_stock_change": float(
-            count_preceded_by(events, "VENTA_CREADA", "STOCK_MODIFICADO", STOCK_SALE_WINDOW)
+        "admin_action_count": float(
+            sum(
+                1
+                for event in events_10m
+                if event.get("resultado") != "FALLIDO" and event["tipo_evento"] in ADMIN_TYPES
+            )
         ),
+        "role_change_count": float(count_type(events_10m, "CAMBIO_ROL")),
+        "user_change_count": float(
+            sum(
+                1
+                for event in events_10m
+                if event.get("resultado") != "FALLIDO" and event["tipo_evento"] in USER_CHANGE_TYPES
+            )
+        ),
+        "sales_after_stock_change": float(len({link["venta_id"] for link in stock_links})),
         "sales_after_price_change": float(
             count_preceded_by(events, "VENTA_CREADA", "PRECIO_MODIFICADO", PRICE_SALE_WINDOW)
         ),
@@ -154,7 +259,7 @@ def extract_features(events_input: list[dict[str, Any]], reference: datetime | N
         "price_sale_rule": 1.0 if rules["R4"]["fired"] else 0.0,
         "admin_activity_rule": 1.0 if rules["R5"]["fired"] else 0.0,
         "combined_pattern_rule": 1.0 if rules["R6"]["fired"] else 0.0,
-        "risk_rule_count": float(sum(1 for key in ("R1", "R2", "R3", "R4", "R5", "R6") if rules[key]["fired"])),
+        "risk_rule_count": float(sum(1 for key in ("R1", "R2", "R5") if rules[key]["fired"])),
     }
 
 

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BrowserRouter,
   Route,
@@ -33,6 +33,7 @@ import ProductsPage from "./products/pages/ProductsPage";
 import CategoriesPage from "./products/pages/CategoriesPage";
 import SalesPage from "./sales/pages/SalesPage";
 import InventoryPage from "./inventory/pages/InventoryPage";
+import PurchasesPage from "./inventory/pages/PurchasesPage";
 import NotificationsPage from "./notifications/pages/NotificationsPage";
 import TrainingDashboardPage from "./analysis/pages/TrainingDashboardPage";
 import TrainingDetailPage from "./analysis/pages/TrainingDetailPage";
@@ -189,6 +190,10 @@ function App() {
         <Route
           path="/administracion/inventario"
           element={<RequireAuth><InventoryPage /></RequireAuth>}
+/>
+        <Route
+          path="/administracion/compras"
+          element={<RequireAuth><PurchasesPage /></RequireAuth>}
         />
         <Route
           path="/administracion/notificaciones"

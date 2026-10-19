@@ -84,8 +84,8 @@ def sample_quantity(rng: np.random.Generator, retail_stats: dict) -> int:
 
 def generate_training_frame(
     random_state: int = RANDOM_STATE,
-    normal_per_family: int = 134,
-    anomaly_per_family: int = 58,
+    normal_per_family: int = 80,
+    anomaly_per_family: int = 100,
 ) -> tuple[pd.DataFrame, dict, list[dict]]:
     rng = np.random.default_rng(random_state)
     retail_stats = load_uci_quantity_reference(rng)

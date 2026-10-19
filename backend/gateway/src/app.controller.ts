@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Headers,
   HttpCode,
@@ -12,6 +13,7 @@ import {
   Put,
   Query,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 
@@ -635,11 +637,49 @@ export class AppController {
     );
   }
 
+  @Get('api/correlation/events')
+  async listCorrelationEvents(
+    @Query('usuario_id') usuarioId?: string,
+    @Query('service') service?: string,
+    @Query('tipo_evento') tipoEvento?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    await this.requireAnalysisPermission(authorization);
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries({
+      usuario_id: usuarioId,
+      service,
+      tipo_evento: tipoEvento,
+      from,
+      to,
+      limit,
+    })) {
+      if (value) params.set(key, value);
+    }
+    return this.microservicesService.get(
+      `http://logic-correlation-service:4007/events?${params.toString()}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/correlation/analyses')
+  async listCorrelationAnalyses(@Headers('authorization') authorization?: string) {
+    await this.requireAnalysisPermission(authorization);
+    return this.microservicesService.get(
+      'http://logic-correlation-service:4007/analyses',
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
   @Post('api/correlation/events')
-  ingestCorrelationEvent(
+  async ingestCorrelationEvent(
     @Body() body: unknown,
     @Headers('authorization') authorization?: string,
   ) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.post(
       'http://logic-correlation-service:4007/events',
       body,
@@ -648,10 +688,11 @@ export class AppController {
   }
 
   @Post('api/correlation/correlations/analyze')
-  analyzeCorrelation(
+  async analyzeCorrelation(
     @Body() body: unknown,
     @Headers('authorization') authorization?: string,
   ) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.post(
       'http://logic-correlation-service:4007/correlations/analyze',
       body,
@@ -660,10 +701,11 @@ export class AppController {
   }
 
   @Post('api/correlation/features/generate')
-  generateCorrelationFeatures(
+  async generateCorrelationFeatures(
     @Body() body: unknown,
     @Headers('authorization') authorization?: string,
   ) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.post(
       'http://logic-correlation-service:4007/features/generate',
       body,
@@ -672,10 +714,11 @@ export class AppController {
   }
 
   @Post('api/correlation/analyze-and-classify')
-  analyzeAndClassify(
+  async analyzeAndClassify(
     @Body() body: unknown,
     @Headers('authorization') authorization?: string,
   ) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.post(
       'http://logic-correlation-service:4007/analyze-and-classify',
       body,
@@ -692,10 +735,11 @@ export class AppController {
   }
 
   @Post('api/ai/train')
-  aiTrain(
+  async aiTrain(
     @Body() body: unknown,
     @Headers('authorization') authorization?: string,
   ) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.post(
       'http://ai-service:4008/train',
       body,
@@ -704,10 +748,11 @@ export class AppController {
   }
 
   @Post('api/ai/predict')
-  aiPredict(
+  async aiPredict(
     @Body() body: unknown,
     @Headers('authorization') authorization?: string,
   ) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.post(
       'http://ai-service:4008/predict',
       body,
@@ -716,7 +761,8 @@ export class AppController {
   }
 
   @Get('api/ai/training')
-  aiTrainingList(@Headers('authorization') authorization?: string) {
+  async aiTrainingList(@Headers('authorization') authorization?: string) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.get(
       'http://ai-service:4008/training',
       this.getForwardedHeaders(authorization),
@@ -724,10 +770,11 @@ export class AppController {
   }
 
   @Get('api/ai/training/:id')
-  aiTrainingDetail(
+  async aiTrainingDetail(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.get(
       `http://ai-service:4008/training/${id}`,
       this.getForwardedHeaders(authorization),
@@ -735,7 +782,8 @@ export class AppController {
   }
 
   @Get('api/ai/metrics')
-  aiMetrics(@Headers('authorization') authorization?: string) {
+  async aiMetrics(@Headers('authorization') authorization?: string) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.get(
       'http://ai-service:4008/metrics',
       this.getForwardedHeaders(authorization),
@@ -743,7 +791,8 @@ export class AppController {
   }
 
   @Get('api/ai/model')
-  aiModel(@Headers('authorization') authorization?: string) {
+  async aiModel(@Headers('authorization') authorization?: string) {
+    await this.requireAnalysisPermission(authorization);
     return this.microservicesService.get(
       'http://ai-service:4008/model',
       this.getForwardedHeaders(authorization),
@@ -963,6 +1012,74 @@ export class AppController {
     );
   }
 
+  @Get('api/productos/variantes')
+  getVariantes(
+    @Query('producto_id') productoId?: string,
+    @Query('buscar') buscar?: string,
+    @Query('estado') estado?: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const query = new URLSearchParams();
+    if (productoId) query.set('producto_id', productoId);
+    if (buscar) query.set('buscar', buscar);
+    if (estado) query.set('estado', estado);
+    const suffix = query.size ? `?${query.toString()}` : '';
+
+    return this.microservicesService.get(
+      `http://products-service:4003/variantes${suffix}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/productos/variantes/:id')
+  getVariante(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://products-service:4003/variantes/${id}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/productos/variantes')
+  createVariante(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      'http://products-service:4003/variantes',
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Put('api/productos/variantes/:id')
+  updateVariante(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.put(
+      `http://products-service:4003/variantes/${id}`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Patch('api/productos/variantes/:id/estado')
+  changeVarianteStatus(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.patch(
+      `http://products-service:4003/variantes/${id}/estado`,
+      body,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
   @Get('api/productos/:id')
   getProducto(@Param('id') id: string) {
     return this.microservicesService.get(
@@ -971,26 +1088,40 @@ export class AppController {
   }
 
   @Post('api/productos')
-  createProducto(@Body() body: unknown) {
+  createProducto(
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.post(
       'http://products-service:4003/productos',
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Put('api/productos/:id')
-  updateProducto(@Param('id') id: string, @Body() body: unknown) {
+  updateProducto(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.put(
       `http://products-service:4003/productos/${id}`,
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
 
   @Patch('api/productos/:id/estado')
-  changeProductoStatus(@Param('id') id: string, @Body() body: unknown) {
+  changeProductoStatus(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('authorization') authorization?: string,
+  ) {
     return this.microservicesService.patch(
       `http://products-service:4003/productos/${id}/estado`,
       body,
+      this.getForwardedHeaders(authorization),
     );
   }
   // =========================================================
@@ -1005,5 +1136,41 @@ export class AppController {
     return {
       Authorization: authorization,
     };
+  }
+
+  private async requireAnalysisPermission(authorization?: string): Promise<void> {
+    if (!authorization) {
+      throw new UnauthorizedException('Se requiere una sesión autenticada.');
+    }
+    const secret = process.env.INTERNAL_SERVICE_SECRET;
+    if (!secret) {
+      throw new BadGatewayException('La autorización del servicio de usuarios no está configurada.');
+    }
+
+    let status: number;
+    try {
+      const response = await fetch('http://users-service:4002/internal/auth/validate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authorization,
+          'x-internal-service-key': secret,
+        },
+        body: JSON.stringify({ permission: 'USUARIOS_LEER' }),
+        signal: AbortSignal.timeout(3000),
+      });
+      status = response.status;
+    } catch {
+      throw new BadGatewayException('No se pudo validar el permiso de análisis.');
+    }
+    if (status === 401) {
+      throw new UnauthorizedException('La sesión no es válida.');
+    }
+    if (status === 403) {
+      throw new ForbiddenException('No tiene permiso para consultar análisis.');
+    }
+    if (status < 200 || status >= 300) {
+      throw new BadGatewayException('No se pudo validar el permiso de análisis.');
+    }
   }
 }

@@ -12,7 +12,16 @@ function toMs(event) {
 }
 
 function sortEvents(events) {
-  return [...events].sort((a, b) => toMs(a) - toMs(b) || String(a.event_id).localeCompare(String(b.event_id)));
+  const sorted = [...events].sort(
+    (a, b) => toMs(a) - toMs(b) || String(a.event_id).localeCompare(String(b.event_id)),
+  );
+  const seen = new Set();
+  return sorted.filter((event) => {
+    if (event.event_id == null) return true;
+    if (seen.has(event.event_id)) return false;
+    seen.add(event.event_id);
+    return true;
+  });
 }
 
 function windowEvents(events, referenceMs, minutes) {
@@ -24,7 +33,12 @@ function windowEvents(events, referenceMs, minutes) {
 }
 
 function countType(events, type) {
-  return events.filter((event) => event.tipo_evento === type).length;
+  return events.filter((event) =>
+    event.tipo_evento === type &&
+    (type === EVENT_TYPES.LOGIN_FALLIDO
+      ? event.resultado === "FALLIDO"
+      : event.resultado !== "FALLIDO"),
+  ).length;
 }
 
 function minutesSince(events, types, referenceMs) {
@@ -38,15 +52,62 @@ function countPrecededBy(events, targetType, precursorType, maxGapMs) {
   let count = 0;
   for (let i = 0; i < events.length; i += 1) {
     const current = events[i];
-    if (current.tipo_evento !== targetType) continue;
+    if (current.tipo_evento !== targetType || current.resultado === "FALLIDO") continue;
     const currentMs = toMs(current);
     const preceded = events.slice(0, i).some((prev) => {
-      if (prev.tipo_evento !== precursorType) return false;
-      return currentMs - toMs(prev) <= maxGapMs && currentMs >= toMs(prev);
+      if (prev.tipo_evento !== precursorType || prev.resultado === "FALLIDO") return false;
+      if (
+        current.usuario_id != null &&
+        prev.usuario_id != null &&
+        String(current.usuario_id) !== String(prev.usuario_id)
+      ) return false;
+      const gap = currentMs - toMs(prev);
+      return gap >= 0 && gap < maxGapMs;
     });
     if (preceded) count += 1;
   }
   return count;
+}
+
+function linkedStockSales(events) {
+  const sales = events.filter((event) =>
+    event.tipo_evento === EVENT_TYPES.VENTA_CREADA &&
+    event.resultado !== "FALLIDO" &&
+    event.entidad === "venta" &&
+    event.entidad_id != null,
+  );
+  const movements = events.filter((event) =>
+    event.tipo_evento === EVENT_TYPES.STOCK_MODIFICADO &&
+    event.resultado !== "FALLIDO" &&
+    event.metadata?.referencia_tipo === "VENTA" &&
+    event.metadata?.tipo_movimiento === "SALIDA" &&
+    event.metadata?.venta_id != null,
+  );
+  const links = [];
+
+  for (const movement of movements) {
+    const sale = sales.find((candidate) => {
+      if (String(candidate.entidad_id) !== String(movement.metadata.venta_id)) return false;
+      if (
+        candidate.usuario_id != null &&
+        movement.usuario_id != null &&
+        String(candidate.usuario_id) !== String(movement.usuario_id)
+      ) return false;
+      return Math.abs(toMs(candidate) - toMs(movement)) < STOCK_SALE_WINDOW_MS;
+    });
+    if (sale) {
+      links.push({
+        venta_id: String(sale.entidad_id),
+        sale_event_id: sale.event_id,
+        stock_event_id: movement.event_id,
+        variante_producto_id: movement.entidad_id == null
+          ? null
+          : String(movement.entidad_id),
+      });
+    }
+  }
+
+  return links;
 }
 
 function hasSequenceWithin(events, precursorType, targetType, maxGapMs) {
@@ -56,7 +117,11 @@ function hasSequenceWithin(events, precursorType, targetType, maxGapMs) {
 function uniqueEntities(events) {
   const ids = new Set();
   for (const event of events) {
-    if (event.entidad_id !== null && event.entidad_id !== undefined) {
+    if (
+      event.resultado !== "FALLIDO" &&
+      event.entidad_id !== null &&
+      event.entidad_id !== undefined
+    ) {
       ids.add(`${event.entidad}:${event.entidad_id}`);
     }
   }
@@ -66,24 +131,23 @@ function uniqueEntities(events) {
 function analyzeRules(events10m, events30m, eventsAll) {
   const failedLoginCount10m = countType(events10m, EVENT_TYPES.LOGIN_FALLIDO);
   const cancelled30m = countType(events30m, EVENT_TYPES.VENTA_ANULADA);
-  const admin10m = events10m.filter((event) => ADMIN_TYPES.has(event.tipo_evento)).length;
+  const admin10m = events10m.filter((event) =>
+    event.resultado !== "FALLIDO" && ADMIN_TYPES.has(event.tipo_evento),
+  ).length;
 
   const r1 = failedLoginCount10m >= 5;
   const r2 = cancelled30m >= 3;
-  const r3 = hasSequenceWithin(
+  const stockSaleLinks = linkedStockSales(eventsAll);
+  const r3 = stockSaleLinks.length > 0;
+  const salesAfterPriceChange = countPrecededBy(
     eventsAll,
-    EVENT_TYPES.STOCK_MODIFICADO,
     EVENT_TYPES.VENTA_CREADA,
-    STOCK_SALE_WINDOW_MS,
-  );
-  const r4 = hasSequenceWithin(
-    eventsAll,
     EVENT_TYPES.PRECIO_MODIFICADO,
-    EVENT_TYPES.VENTA_CREADA,
     PRICE_SALE_WINDOW_MS,
   );
+  const r4 = false;
   const r5 = admin10m >= 3;
-  const firedCount = [r1, r2, r3, r4, r5].filter(Boolean).length;
+  const firedCount = [r1, r2, r5].filter(Boolean).length;
   const r6 = firedCount >= 2;
 
   return {
@@ -101,15 +165,15 @@ function analyzeRules(events10m, events30m, eventsAll) {
     },
     R3: {
       id: "R3",
-      description: "STOCK_MODIFICADO seguido de VENTA_CREADA en menos de 15 minutos",
+      description: "Salida de stock relacionada por venta_id con una venta en menos de 15 minutos",
       fired: r3,
-      value: r3 ? 1 : 0,
+      value: stockSaleLinks.length,
     },
     R4: {
       id: "R4",
-      description: "PRECIO_MODIFICADO seguido de VENTA_CREADA en menos de 15 minutos",
+      description: "Relación temporal precio-venta solo contextual; no es una regla de riesgo",
       fired: r4,
-      value: r4 ? 1 : 0,
+      value: salesAfterPriceChange,
     },
     R5: {
       id: "R5",
@@ -119,7 +183,7 @@ function analyzeRules(events10m, events30m, eventsAll) {
     },
     R6: {
       id: "R6",
-      description: "Combinación de dos o más patrones anómalos",
+      description: "Combinación de dos o más señales R1, R2 o R5",
       fired: r6,
       value: firedCount,
     },
@@ -151,14 +215,15 @@ function extractFeatures(eventsInput, referenceTimestamp) {
   const stockChangeCount = countType(events30m, EVENT_TYPES.STOCK_MODIFICADO);
   const priceChangeCount = countType(events30m, EVENT_TYPES.PRECIO_MODIFICADO);
   const adminActionCount = events10m.filter((event) =>
-    ADMIN_TYPES.has(event.tipo_evento),
+    event.resultado !== "FALLIDO" && ADMIN_TYPES.has(event.tipo_evento),
   ).length;
   const roleChangeCount = countType(events10m, EVENT_TYPES.CAMBIO_ROL);
   const userChangeCount = events10m.filter((event) =>
-    USER_CHANGE_TYPES.has(event.tipo_evento),
+    event.resultado !== "FALLIDO" && USER_CHANGE_TYPES.has(event.tipo_evento),
   ).length;
 
   const rules = analyzeRules(events10m, events30m, events);
+  const stockSaleLinks = linkedStockSales(events);
 
   const features = {
     event_count_5m: events5m.length,
@@ -175,12 +240,7 @@ function extractFeatures(eventsInput, referenceTimestamp) {
     admin_action_count: adminActionCount,
     role_change_count: roleChangeCount,
     user_change_count: userChangeCount,
-    sales_after_stock_change: countPrecededBy(
-      events,
-      EVENT_TYPES.VENTA_CREADA,
-      EVENT_TYPES.STOCK_MODIFICADO,
-      STOCK_SALE_WINDOW_MS,
-    ),
+    sales_after_stock_change: new Set(stockSaleLinks.map((link) => link.venta_id)).size,
     sales_after_price_change: countPrecededBy(
       events,
       EVENT_TYPES.VENTA_CREADA,
@@ -206,9 +266,7 @@ function extractFeatures(eventsInput, referenceTimestamp) {
     price_sale_rule: rules.R4.fired ? 1 : 0,
     admin_activity_rule: rules.R5.fired ? 1 : 0,
     combined_pattern_rule: rules.R6.fired ? 1 : 0,
-    risk_rule_count: [rules.R1, rules.R2, rules.R3, rules.R4, rules.R5, rules.R6].filter(
-      (rule) => rule.fired,
-    ).length,
+    risk_rule_count: [rules.R1, rules.R2, rules.R5].filter((rule) => rule.fired).length,
   };
 
   return { features, rules, events5m, events10m, events30m, referenceMs };
@@ -259,7 +317,9 @@ function correlate(eventsInput, options = {}) {
   const analysis = extractFeatures(events, options.reference_timestamp);
 
   return {
-    usuario_id: options.usuario_id ?? (events[0] ? events[0].usuario_id : null),
+    usuario_id: Object.hasOwn(options, "usuario_id")
+      ? options.usuario_id
+      : (events[0] ? events[0].usuario_id : null),
     event_count: events.length,
     windows: {
       "5m": analysis.events5m.length,
@@ -275,6 +335,9 @@ function correlate(eventsInput, options = {}) {
       stock_then_sale: analysis.features.sales_after_stock_change,
       price_then_sale: analysis.features.sales_after_price_change,
     },
+    relations: {
+      stock_to_sale: linkedStockSales(events),
+    },
     rules: analysis.rules,
     features: analysis.features,
   };
@@ -287,4 +350,5 @@ module.exports = {
   windowEvents,
   countType,
   hasSequenceWithin,
+  linkedStockSales,
 };

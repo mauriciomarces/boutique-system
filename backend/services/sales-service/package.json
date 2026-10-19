@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
-    "test": "node --test test/anulacion.routes.test.js"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "7.9.1",

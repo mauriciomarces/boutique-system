@@ -88,3 +88,28 @@ export async function getInventoryMovements(): Promise<InventoryMovement[]> {
 
   return unwrapList<InventoryMovement>(data);
 }
+
+export async function ensureInventoryForVariant(
+  variante_producto_id: string | number,
+): Promise<void> {
+  const existing = await getInventory({
+    variante_producto_id: String(variante_producto_id),
+  });
+
+  if (existing.some(
+    (item) =>
+      String(item.variante_producto_id) ===
+      String(variante_producto_id),
+  )) {
+    return;
+  }
+
+  await request<InventoryItem>(API_BASE_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      variante_producto_id: String(variante_producto_id),
+      cantidad: 0,
+      cantidad_minima: 0,
+    }),
+  });
+}
