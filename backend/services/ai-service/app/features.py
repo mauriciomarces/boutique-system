@@ -132,7 +132,8 @@ def linked_stock_sales(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 and str(sale_actor) != str(movement_actor)
             ):
                 continue
-            if abs(_ts(sale) - _ts(movement)) >= STOCK_SALE_WINDOW:
+            gap = _ts(movement) - _ts(sale)
+            if not timedelta(0) <= gap < STOCK_SALE_WINDOW:
                 continue
             links.append(
                 {
@@ -203,6 +204,10 @@ def extract_features(events_input: list[dict[str, Any]], reference: datetime | N
         return empty_features()
 
     reference_ts = reference or _ts(events[-1])
+    events = [event for event in events if _ts(event) <= reference_ts]
+    if not events:
+        return empty_features()
+
     events_5m = window_events(events, reference_ts, 5)
     events_10m = window_events(events, reference_ts, 10)
     events_30m = window_events(events, reference_ts, 30)
@@ -211,11 +216,36 @@ def extract_features(events_input: list[dict[str, Any]], reference: datetime | N
     failed_login_count = count_type(events_10m, "LOGIN_FALLIDO")
     successful_login_count = count_type(events_10m, "LOGIN")
     login_total = failed_login_count + successful_login_count
+    sales_count_5m = count_type(events_5m, "VENTA_CREADA")
     sales_count = count_type(events_30m, "VENTA_CREADA")
     cancelled_sales_count = count_type(events_30m, "VENTA_ANULADA")
     sale_ops = sales_count + cancelled_sales_count
     rules = analyze_rules(events_10m, events_30m, events)
     stock_links = linked_stock_sales(events)
+    linked_sale_ids = {str(link["venta_id"]) for link in stock_links}
+    cancelled_sale_ids = {
+        str(event["entidad_id"])
+        for event in events_30m
+        if event.get("tipo_evento") == "VENTA_ANULADA"
+        and event.get("resultado") != "FALLIDO"
+        and event.get("entidad") == "venta"
+        and event.get("entidad_id") is not None
+    }
+    mature_sales = [
+        event
+        for event in events_30m
+        if event.get("tipo_evento") == "VENTA_CREADA"
+        and event.get("resultado") != "FALLIDO"
+        and event.get("entidad") == "venta"
+        and event.get("entidad_id") is not None
+        and reference_ts - _ts(event) >= STOCK_SALE_WINDOW
+    ]
+    sales_without_stock_link_count = len({
+        str(event["entidad_id"])
+        for event in mature_sales
+        if str(event["entidad_id"]) not in linked_sale_ids
+        and str(event["entidad_id"]) not in cancelled_sale_ids
+    })
 
     return {
         "event_count_5m": float(len(events_5m)),
@@ -224,7 +254,9 @@ def extract_features(events_input: list[dict[str, Any]], reference: datetime | N
         "failed_login_count": float(failed_login_count),
         "successful_login_count": float(successful_login_count),
         "failed_login_ratio": failed_login_count / login_total if login_total else 0.0,
+        "sales_count_5m": float(sales_count_5m),
         "sales_count": float(sales_count),
+        "sales_without_stock_link_count": float(sales_without_stock_link_count),
         "cancelled_sales_count": float(cancelled_sales_count),
         "cancellation_ratio": cancelled_sales_count / sale_ops if sale_ops else 0.0,
         "stock_change_count": float(count_type(events_30m, "STOCK_MODIFICADO")),
@@ -271,7 +303,9 @@ def empty_features() -> dict[str, float]:
         "failed_login_count": 0.0,
         "successful_login_count": 0.0,
         "failed_login_ratio": 0.0,
+        "sales_count_5m": 0.0,
         "sales_count": 0.0,
+        "sales_without_stock_link_count": 0.0,
         "cancelled_sales_count": 0.0,
         "cancellation_ratio": 0.0,
         "stock_change_count": 0.0,

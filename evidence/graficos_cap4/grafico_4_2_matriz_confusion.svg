@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="520" viewBox="0 0 720 520">
+<rect width="100%" height="100%" fill="white"/>
+<text x="360.0" y="35" text-anchor="middle" font-family="Arial" font-size="21" font-weight="bold">Gráfico 4.2. Matriz de confusión, evaluación V3</text>
+<text x="370" y="90" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold">Clase predicha</text>
+<text x="215" y="130" text-anchor="middle" font-family="Arial" font-size="15" font-weight="normal">Normal</text>
+<text x="425" y="130" text-anchor="middle" font-family="Arial" font-size="15" font-weight="normal">Anómalo</text>
+<text x="80" y="225" text-anchor="start" font-family="Arial" font-size="15" font-weight="bold">Real:</text>
+<text x="145" y="205" text-anchor="start" font-family="Arial" font-size="14" font-weight="normal">Normal</text>
+<text x="145" y="325" text-anchor="start" font-family="Arial" font-size="14" font-weight="normal">Anómalo</text>
+<rect x="240" y="150" width="180" height="95" fill="#d9e8f5" stroke="#555"/>
+<text x="330" y="205" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold">560</text>
+<rect x="450" y="150" width="180" height="95" fill="#f3d9d9" stroke="#555"/>
+<text x="540" y="205" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold">0</text>
+<rect x="240" y="270" width="180" height="95" fill="#f3d9d9" stroke="#555"/>
+<text x="330" y="325" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold">18</text>
+<rect x="450" y="270" width="180" height="95" fill="#d9e8f5" stroke="#555"/>
+<text x="540" y="325" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold">222</text>
+<text x="360" y="440" text-anchor="middle" font-family="Arial" font-size="13" font-weight="normal">Filas: clase real | Columnas: clase predicha</text>
+</svg>

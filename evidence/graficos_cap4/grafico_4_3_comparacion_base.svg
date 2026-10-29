@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="600" viewBox="0 0 1100 600">
+<rect width="100%" height="100%" fill="white"/>
+<text x="550.0" y="35" text-anchor="middle" font-family="Arial" font-size="21" font-weight="bold">Gráfico 4.3. Árbol de decisión frente al clasificador base</text>
+<line x1="90" y1="450.0" x2="1020" y2="450.0" stroke="#ddd"/>
+<text x="78" y="455.0" text-anchor="end" font-family="Arial" font-size="12" font-weight="normal">0%</text>
+<line x1="90" y1="380.0" x2="1020" y2="380.0" stroke="#ddd"/>
+<text x="78" y="385.0" text-anchor="end" font-family="Arial" font-size="12" font-weight="normal">20%</text>
+<line x1="90" y1="310.0" x2="1020" y2="310.0" stroke="#ddd"/>
+<text x="78" y="315.0" text-anchor="end" font-family="Arial" font-size="12" font-weight="normal">40%</text>
+<line x1="90" y1="240.0" x2="1020" y2="240.0" stroke="#ddd"/>
+<text x="78" y="245.0" text-anchor="end" font-family="Arial" font-size="12" font-weight="normal">60%</text>
+<line x1="90" y1="170.0" x2="1020" y2="170.0" stroke="#ddd"/>
+<text x="78" y="175.0" text-anchor="end" font-family="Arial" font-size="12" font-weight="normal">80%</text>
+<line x1="90" y1="100.0" x2="1020" y2="100.0" stroke="#ddd"/>
+<text x="78" y="105.0" text-anchor="end" font-family="Arial" font-size="12" font-weight="normal">100%</text>
+<rect x="136.5" y="107.875" width="28" height="342.125" fill="#557fa3"/>
+<text x="150.5" y="100.875" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">97.8</text>
+<rect x="174.5" y="205.0" width="28" height="245.0" fill="#999999"/>
+<text x="188.5" y="198.0" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">70.0</text>
+<text x="183.0" y="475" text-anchor="middle" font-family="Arial" font-size="12" font-weight="normal">Exactitud</text>
+<rect x="322.5" y="113.125" width="28" height="336.875" fill="#557fa3"/>
+<text x="336.5" y="106.125" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">96.2</text>
+<rect x="360.5" y="275.0" width="28" height="175.0" fill="#999999"/>
+<text x="374.5" y="268.0" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">50.0</text>
+<text x="369.0" y="475" text-anchor="middle" font-family="Arial" font-size="12" font-weight="normal">Balanceada</text>
+<rect x="508.5" y="100.0" width="28" height="350.0" fill="#557fa3"/>
+<text x="522.5" y="93.0" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">100.0</text>
+<rect x="546.5" y="450.0" width="28" height="0.0" fill="#999999"/>
+<text x="560.5" y="443.0" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">0.0</text>
+<text x="555.0" y="475" text-anchor="middle" font-family="Arial" font-size="12" font-weight="normal">Precisión</text>
+<rect x="694.5" y="126.25" width="28" height="323.75" fill="#557fa3"/>
+<text x="708.5" y="119.25" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">92.5</text>
+<rect x="732.5" y="450.0" width="28" height="0.0" fill="#999999"/>
+<text x="746.5" y="443.0" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">0.0</text>
+<text x="741.0" y="475" text-anchor="middle" font-family="Arial" font-size="12" font-weight="normal">Sensibilidad</text>
+<rect x="880.5" y="113.63636363636363" width="28" height="336.3636363636364" fill="#557fa3"/>
+<text x="894.5" y="106.63636363636363" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">96.1</text>
+<rect x="918.5" y="450.0" width="28" height="0.0" fill="#999999"/>
+<text x="932.5" y="443.0" text-anchor="middle" font-family="Arial" font-size="10" font-weight="normal">0.0</text>
+<text x="927.0" y="475" text-anchor="middle" font-family="Arial" font-size="12" font-weight="normal">F1</text>
+<rect x="370" y="510" width="16" height="16" fill="#557fa3"/>
+<text x="393" y="523" text-anchor="start" font-family="Arial" font-size="13" font-weight="normal">Árbol de decisión</text>
+<rect x="560" y="510" width="16" height="16" fill="#999999"/>
+<text x="583" y="523" text-anchor="start" font-family="Arial" font-size="13" font-weight="normal">Clasificador base</text>
+</svg>

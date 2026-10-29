@@ -137,10 +137,15 @@ def _features_from_payload(payload: dict[str, Any]) -> dict[str, float]:
 
 @app.post("/predict")
 def predict(body: PredictRequest) -> dict[str, Any]:
+    features = _features_from_payload(body.model_dump())
+
     model = load_current_model()
     if model is None:
-        raise HTTPException(status_code=409, detail="No hay modelo entrenado. Ejecute POST /train.")
-    features = _features_from_payload(body.model_dump())
+        raise HTTPException(
+            status_code=409,
+            detail="No hay modelo entrenado. Ejecute POST /train.",
+        )
+
     metadata = load_current_metadata() or {}
     model_features = metadata.get(
         "features",
@@ -192,28 +197,13 @@ def predict(body: PredictRequest) -> dict[str, Any]:
 
 @app.post("/train")
 def train(body: TrainRequest | None = None) -> dict[str, Any]:
-    body = body or TrainRequest()
-    if not DATASET_PATH.exists():
-        raise HTTPException(
-            status_code=409,
-            detail="No existe data/processed/sposabella_training.csv. Ejecute generate_dataset.py",
-        )
-    try:
-        metadata = train_decision_tree(
-            dataset_path=DATASET_PATH,
-            params={
-                "max_depth": body.max_depth,
-                "min_samples_leaf": body.min_samples_leaf,
-                "random_state": 42,
-            },
-            dataset_version=body.dataset_version,
-        )
-    except DatasetError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return metadata
-
-
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            "Entrenamiento y publicacion temporalmente deshabilitados "
+            "durante la validacion experimental. El modelo vigente no se modifica."
+        ),
+    )
 @app.get("/training")
 def list_training() -> list[dict[str, Any]]:
     session = SessionLocal()

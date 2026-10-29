@@ -93,7 +93,8 @@ function linkedStockSales(events) {
         movement.usuario_id != null &&
         String(candidate.usuario_id) !== String(movement.usuario_id)
       ) return false;
-      return Math.abs(toMs(candidate) - toMs(movement)) < STOCK_SALE_WINDOW_MS;
+      const gapMs = toMs(movement) - toMs(candidate);
+      return gapMs >= 0 && gapMs < STOCK_SALE_WINDOW_MS;
     });
     if (sale) {
       links.push({
@@ -191,7 +192,7 @@ function analyzeRules(events10m, events30m, eventsAll) {
 }
 
 function extractFeatures(eventsInput, referenceTimestamp) {
-  const events = sortEvents(eventsInput);
+  let events = sortEvents(eventsInput);
   if (!events.length) {
     return emptyFeatures();
   }
@@ -199,6 +200,15 @@ function extractFeatures(eventsInput, referenceTimestamp) {
   const referenceMs = referenceTimestamp
     ? Date.parse(referenceTimestamp)
     : toMs(events[events.length - 1]);
+
+  if (!Number.isFinite(referenceMs)) {
+    throw new Error("referenceTimestamp no es una fecha válida.");
+  }
+
+  events = events.filter((event) => toMs(event) <= referenceMs);
+  if (!events.length) {
+    return emptyFeatures();
+  }
 
   const events5m = windowEvents(events, referenceMs, 5);
   const events10m = windowEvents(events, referenceMs, 10);
@@ -224,6 +234,32 @@ function extractFeatures(eventsInput, referenceTimestamp) {
 
   const rules = analyzeRules(events10m, events30m, events);
   const stockSaleLinks = linkedStockSales(events);
+  const linkedSaleIds = new Set(stockSaleLinks.map((link) => String(link.venta_id)));
+  const cancelledSaleIds = new Set(
+    events30m
+      .filter((event) =>
+        event.tipo_evento === EVENT_TYPES.VENTA_ANULADA &&
+        event.resultado !== "FALLIDO" &&
+        event.entidad === "venta" &&
+        event.entidad_id != null,
+      )
+      .map((event) => String(event.entidad_id)),
+  );
+  const matureSales = events30m.filter((event) =>
+    event.tipo_evento === EVENT_TYPES.VENTA_CREADA &&
+    event.resultado !== "FALLIDO" &&
+    event.entidad === "venta" &&
+    event.entidad_id != null &&
+    referenceMs - toMs(event) >= STOCK_SALE_WINDOW_MS,
+  );
+  const salesWithoutStockLinkCount = new Set(
+    matureSales
+      .filter((event) =>
+        !linkedSaleIds.has(String(event.entidad_id)) &&
+        !cancelledSaleIds.has(String(event.entidad_id)),
+      )
+      .map((event) => String(event.entidad_id)),
+  ).size;
 
   const features = {
     event_count_5m: events5m.length,
@@ -232,7 +268,9 @@ function extractFeatures(eventsInput, referenceTimestamp) {
     failed_login_count: failedLoginCount,
     successful_login_count: successfulLoginCount,
     failed_login_ratio: loginTotal ? failedLoginCount / loginTotal : 0,
+      sales_count_5m: countType(events5m, EVENT_TYPES.VENTA_CREADA),
     sales_count: salesCount,
+      sales_without_stock_link_count: salesWithoutStockLinkCount,
     cancelled_sales_count: cancelledSalesCount,
     cancellation_ratio: saleOps ? cancelledSalesCount / saleOps : 0,
     stock_change_count: stockChangeCount,
@@ -271,7 +309,6 @@ function extractFeatures(eventsInput, referenceTimestamp) {
 
   return { features, rules, events5m, events10m, events30m, referenceMs };
 }
-
 function emptyFeatures() {
   return {
     features: {
@@ -281,7 +318,9 @@ function emptyFeatures() {
       failed_login_count: 0,
       successful_login_count: 0,
       failed_login_ratio: 0,
+      sales_count_5m: 0,
       sales_count: 0,
+      sales_without_stock_link_count: 0,
       cancelled_sales_count: 0,
       cancellation_ratio: 0,
       stock_change_count: 0,

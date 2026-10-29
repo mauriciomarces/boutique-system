@@ -1,0 +1,385 @@
+{
+  "report_version": "1.0",
+  "dataset_version": "expansion_v3",
+  "generated_at_utc": "2026-10-21T18:33:44.872784+00:00",
+  "dataset_sha256": "e8ac69f554eb39740aaac21857d79cbfecaaee1f8e909743cae62af8efa67e77",
+  "dataset_kind": "synthetic_experimental",
+  "label_caveat": "Las etiquetas representan reglas de escenarios sint??ticos; no son confirmaciones de fraude real.",
+  "software": {
+    "pandas": "2.2.3",
+    "scikit_learn": "1.6.1"
+  },
+  "audit": {
+    "cases": 800,
+    "feature_count": 16,
+    "features": [
+      "failed_login_count",
+      "successful_login_count",
+      "failed_login_ratio",
+      "sales_count_5m",
+      "sales_count",
+      "sales_without_stock_link_count",
+      "cancelled_sales_count",
+      "cancellation_ratio",
+      "stock_change_count",
+      "price_change_count",
+      "admin_action_count",
+      "role_change_count",
+      "user_change_count",
+      "sales_after_stock_change",
+      "sales_after_price_change",
+      "unique_entities_modified"
+    ],
+    "missing_required_values": 0,
+    "duplicate_feature_vectors": 348,
+    "contradictory_feature_vectors": 0,
+    "class_counts": {
+      "0": 560,
+      "1": 240
+    },
+    "scenario_counts": {
+      "administracion": 100,
+      "alcance_administrativo": 100,
+      "anulaciones": 100,
+      "autenticacion": 100,
+      "consistencia_inventario": 100,
+      "patron_combinado": 100,
+      "precio_venta": 100,
+      "velocidad_ventas": 100
+    }
+  },
+  "parameters": {
+    "criterion": "gini",
+    "splitter": "best",
+    "max_depth": 5,
+    "min_samples_leaf": 5,
+    "random_state": 42
+  },
+  "grouped_cross_validation": {
+    "method": "StratifiedGroupKFold",
+    "folds": 5,
+    "grouping": "hash del vector de caracter??sticas",
+    "tree": {
+      "casos": 800,
+      "accuracy": 0.9775,
+      "balanced_accuracy": 0.9625,
+      "precision_anomalia": 1.0,
+      "recall_anomalia": 0.925,
+      "f1_anomalia": 0.961038961038961,
+      "matriz_confusion": [
+        [
+          560,
+          0
+        ],
+        [
+          18,
+          222
+        ]
+      ]
+    },
+    "baseline": {
+      "casos": 800,
+      "accuracy": 0.7,
+      "balanced_accuracy": 0.5,
+      "precision_anomalia": 0.0,
+      "recall_anomalia": 0.0,
+      "f1_anomalia": 0.0,
+      "matriz_confusion": [
+        [
+          560,
+          0
+        ],
+        [
+          240,
+          0
+        ]
+      ]
+    },
+    "fold_results": [
+      {
+        "fold": 1,
+        "arbol": {
+          "casos": 161,
+          "accuracy": 0.9937888198757764,
+          "balanced_accuracy": 0.9901960784313726,
+          "precision_anomalia": 1.0,
+          "recall_anomalia": 0.9803921568627451,
+          "f1_anomalia": 0.9900990099009901,
+          "matriz_confusion": [
+            [
+              110,
+              0
+            ],
+            [
+              1,
+              50
+            ]
+          ]
+        },
+        "baseline": {
+          "casos": 161,
+          "accuracy": 0.6832298136645962,
+          "balanced_accuracy": 0.5,
+          "precision_anomalia": 0.0,
+          "recall_anomalia": 0.0,
+          "f1_anomalia": 0.0,
+          "matriz_confusion": [
+            [
+              110,
+              0
+            ],
+            [
+              51,
+              0
+            ]
+          ]
+        },
+        "vectores_compartidos_train_test": 0
+      },
+      {
+        "fold": 2,
+        "arbol": {
+          "casos": 145,
+          "accuracy": 0.993103448275862,
+          "balanced_accuracy": 0.9871794871794872,
+          "precision_anomalia": 1.0,
+          "recall_anomalia": 0.9743589743589743,
+          "f1_anomalia": 0.987012987012987,
+          "matriz_confusion": [
+            [
+              106,
+              0
+            ],
+            [
+              1,
+              38
+            ]
+          ]
+        },
+        "baseline": {
+          "casos": 145,
+          "accuracy": 0.7310344827586207,
+          "balanced_accuracy": 0.5,
+          "precision_anomalia": 0.0,
+          "recall_anomalia": 0.0,
+          "f1_anomalia": 0.0,
+          "matriz_confusion": [
+            [
+              106,
+              0
+            ],
+            [
+              39,
+              0
+            ]
+          ]
+        },
+        "vectores_compartidos_train_test": 0
+      },
+      {
+        "fold": 3,
+        "arbol": {
+          "casos": 159,
+          "accuracy": 0.949685534591195,
+          "balanced_accuracy": 0.9245283018867925,
+          "precision_anomalia": 1.0,
+          "recall_anomalia": 0.8490566037735849,
+          "f1_anomalia": 0.9183673469387755,
+          "matriz_confusion": [
+            [
+              106,
+              0
+            ],
+            [
+              8,
+              45
+            ]
+          ]
+        },
+        "baseline": {
+          "casos": 159,
+          "accuracy": 0.6666666666666666,
+          "balanced_accuracy": 0.5,
+          "precision_anomalia": 0.0,
+          "recall_anomalia": 0.0,
+          "f1_anomalia": 0.0,
+          "matriz_confusion": [
+            [
+              106,
+              0
+            ],
+            [
+              53,
+              0
+            ]
+          ]
+        },
+        "vectores_compartidos_train_test": 0
+      },
+      {
+        "fold": 4,
+        "arbol": {
+          "casos": 169,
+          "accuracy": 0.9704142011834319,
+          "balanced_accuracy": 0.9568965517241379,
+          "precision_anomalia": 1.0,
+          "recall_anomalia": 0.9137931034482759,
+          "f1_anomalia": 0.954954954954955,
+          "matriz_confusion": [
+            [
+              111,
+              0
+            ],
+            [
+              5,
+              53
+            ]
+          ]
+        },
+        "baseline": {
+          "casos": 169,
+          "accuracy": 0.6568047337278107,
+          "balanced_accuracy": 0.5,
+          "precision_anomalia": 0.0,
+          "recall_anomalia": 0.0,
+          "f1_anomalia": 0.0,
+          "matriz_confusion": [
+            [
+              111,
+              0
+            ],
+            [
+              58,
+              0
+            ]
+          ]
+        },
+        "vectores_compartidos_train_test": 0
+      },
+      {
+        "fold": 5,
+        "arbol": {
+          "casos": 166,
+          "accuracy": 0.9819277108433735,
+          "balanced_accuracy": 0.9615384615384616,
+          "precision_anomalia": 1.0,
+          "recall_anomalia": 0.9230769230769231,
+          "f1_anomalia": 0.96,
+          "matriz_confusion": [
+            [
+              127,
+              0
+            ],
+            [
+              3,
+              36
+            ]
+          ]
+        },
+        "baseline": {
+          "casos": 166,
+          "accuracy": 0.7650602409638554,
+          "balanced_accuracy": 0.5,
+          "precision_anomalia": 0.0,
+          "recall_anomalia": 0.0,
+          "f1_anomalia": 0.0,
+          "matriz_confusion": [
+            [
+              127,
+              0
+            ],
+            [
+              39,
+              0
+            ]
+          ]
+        },
+        "vectores_compartidos_train_test": 0
+      }
+    ],
+    "one_oof_prediction_per_case": true
+  },
+  "unseen_family_holdout": {
+    "test_families": [
+      "alcance_administrativo",
+      "patron_combinado"
+    ],
+    "train_cases": 600,
+    "test_cases": 200,
+    "tree": {
+      "casos": 200,
+      "accuracy": 0.92,
+      "balanced_accuracy": 0.8666666666666667,
+      "precision_anomalia": 1.0,
+      "recall_anomalia": 0.7333333333333333,
+      "f1_anomalia": 0.8461538461538461,
+      "matriz_confusion": [
+        [
+          140,
+          0
+        ],
+        [
+          16,
+          44
+        ]
+      ]
+    },
+    "per_family": {
+      "alcance_administrativo": {
+        "casos": 100,
+        "accuracy": 1.0,
+        "balanced_accuracy": 1.0,
+        "precision_anomalia": 1.0,
+        "recall_anomalia": 1.0,
+        "f1_anomalia": 1.0,
+        "matriz_confusion": [
+          [
+            70,
+            0
+          ],
+          [
+            0,
+            30
+          ]
+        ]
+      },
+      "patron_combinado": {
+        "casos": 100,
+        "accuracy": 0.84,
+        "balanced_accuracy": 0.7333333333333334,
+        "precision_anomalia": 1.0,
+        "recall_anomalia": 0.4666666666666667,
+        "f1_anomalia": 0.6363636363636364,
+        "matriz_confusion": [
+          [
+            70,
+            0
+          ],
+          [
+            16,
+            14
+          ]
+        ]
+      }
+    },
+    "feature_importances": {
+      "failed_login_ratio": 0.20696548898063885,
+      "sales_count": 0.19373747979667297,
+      "sales_after_price_change": 0.18207985904308702,
+      "sales_without_stock_link_count": 0.17070103239825984,
+      "admin_action_count": 0.1614280791894288,
+      "sales_count_5m": 0.04413041786631391,
+      "sales_after_stock_change": 0.040957642725598514,
+      "failed_login_count": 0.0,
+      "successful_login_count": 0.0,
+      "cancelled_sales_count": 0.0,
+      "cancellation_ratio": 0.0,
+      "stock_change_count": 0.0,
+      "price_change_count": 0.0,
+      "role_change_count": 0.0,
+      "user_change_count": 0.0,
+      "unique_entities_modified": 0.0
+    }
+  },
+  "interpretation": "Las m??tricas de validaci??n cruzada miden el rendimiento en casos sint??ticos de familias conocidas. La prueba por familias mide generalizaci??n a dos familias reservadas. Ninguna prueba valida la detecci??n de fraude real."
+}
