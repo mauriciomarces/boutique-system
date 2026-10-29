@@ -1,0 +1,562 @@
+{
+    "title":  "Evaluaci?n experimental del dataset y ?rbol de decisi?n SposaBella",
+    "date":  "2026-10-21",
+    "seed":  20261020,
+    "dataset_manifest":  {
+                             "random_state":  20261020,
+                             "n_rows":  800,
+                             "n_normal":  400,
+                             "n_anomalo":  400,
+                             "uci_reference":  {
+                                                   "used_local_file":  false,
+                                                   "path":  null,
+                                                   "n_rows_sampled":  0,
+                                                   "median_quantity":  3.0,
+                                                   "p75_quantity":  12.0,
+                                                   "source":  {
+                                                                  "name":  "Online Retail",
+                                                                  "source":  "UCI Machine Learning Repository",
+                                                                  "url":  "https://archive.ics.uci.edu/dataset/352/online+retail",
+                                                                  "doi":  "10.24432/C5BW33",
+                                                                  "license":  "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+                                                                  "records_declared":  541909,
+                                                                  "note":  "El archivo UCI no contiene etiqueta de fraude ni de anomal├¡a operativa de SposaBella. Se usa solo como referencia de intensidad transaccional minorista."
+                                                              }
+                                               },
+                             "label_policy":  "label=0 si el vector proviene de un escenario NORMAL documentado; label=1 si proviene de un escenario AN├ôMALO controlado. Las reglas l├│gicas no asignan la etiqueta."
+                         },
+    "dataset_quality_and_eda":  {
+                                    "rows":  800,
+                                    "columns_total":  33,
+                                    "features_model":  [
+                                                           "failed_login_count",
+                                                           "successful_login_count",
+                                                           "failed_login_ratio",
+                                                           "sales_count_5m",
+                                                           "sales_count",
+                                                           "sales_without_stock_link_count",
+                                                           "cancelled_sales_count",
+                                                           "cancellation_ratio",
+                                                           "stock_change_count",
+                                                           "price_change_count",
+                                                           "admin_action_count",
+                                                           "role_change_count",
+                                                           "user_change_count",
+                                                           "sales_after_stock_change",
+                                                           "sales_after_price_change",
+                                                           "unique_entities_modified"
+                                                       ],
+                                    "missing_values_features_and_target":  0,
+                                    "nonfinite_numeric_values":  0,
+                                    "labels":  {
+                                                   "0":  400,
+                                                   "1":  400
+                                               },
+                                    "label_sources":  {
+                                                          "synthetic_anomaly_scenario":  400,
+                                                          "synthetic_normal_scenario":  400
+                                                      },
+                                    "scenario_distribution":  [
+                                                                  {
+                                                                      "scenario":  "admin_burst",
+                                                                      "label":  1,
+                                                                      "rows":  100
+                                                                  },
+                                                                  {
+                                                                      "scenario":  "cancellations",
+                                                                      "label":  1,
+                                                                      "rows":  100
+                                                                  },
+                                                                  {
+                                                                      "scenario":  "combined",
+                                                                      "label":  1,
+                                                                      "rows":  100
+                                                                  },
+                                                                  {
+                                                                      "scenario":  "failed_logins",
+                                                                      "label":  1,
+                                                                      "rows":  100
+                                                                  },
+                                                                  {
+                                                                      "scenario":  "normal_a",
+                                                                      "label":  0,
+                                                                      "rows":  80
+                                                                  },
+                                                                  {
+                                                                      "scenario":  "normal_b",
+                                                                      "label":  0,
+                                                                      "rows":  80
+                                                                  },
+                                                                  {
+                                                                      "scenario":  "normal_busy",
+                                                                      "label":  0,
+                                                                      "rows":  80
+                                                                  },
+                                                                  {
+                                                                      "scenario":  "normal_c",
+                                                                      "label":  0,
+                                                                      "rows":  80
+                                                                  },
+                                                                  {
+                                                                      "scenario":  "normal_sale_inventory_link",
+                                                                      "label":  0,
+                                                                      "rows":  80
+                                                                  }
+                                                              ],
+                                    "unique_feature_vectors":  47,
+                                    "duplicate_rows_after_first_occurrence":  753,
+                                    "unique_vector_percentage":  5.88,
+                                    "low_cardinality_features_le_3_values":  {
+                                                                                 "successful_login_count":  2,
+                                                                                 "sales_count_5m":  3,
+                                                                                 "cancellation_ratio":  2,
+                                                                                 "stock_change_count":  2,
+                                                                                 "price_change_count":  2,
+                                                                                 "role_change_count":  3,
+                                                                                 "user_change_count":  3,
+                                                                                 "sales_after_stock_change":  2,
+                                                                                 "sales_after_price_change":  3
+                                                                             },
+                                    "absolute_correlations_ge_0_90":  [
+                                                                          {
+                                                                              "feature_a":  "failed_login_count",
+                                                                              "feature_b":  "failed_login_ratio",
+                                                                              "absolute_correlation":  0.9466
+                                                                          },
+                                                                          {
+                                                                              "feature_a":  "cancelled_sales_count",
+                                                                              "feature_b":  "cancellation_ratio",
+                                                                              "absolute_correlation":  0.975
+                                                                          },
+                                                                          {
+                                                                              "feature_a":  "stock_change_count",
+                                                                              "feature_b":  "sales_after_stock_change",
+                                                                              "absolute_correlation":  1.0
+                                                                          },
+                                                                          {
+                                                                              "feature_a":  "admin_action_count",
+                                                                              "feature_b":  "role_change_count",
+                                                                              "absolute_correlation":  0.9863
+                                                                          },
+                                                                          {
+                                                                              "feature_a":  "admin_action_count",
+                                                                              "feature_b":  "user_change_count",
+                                                                              "absolute_correlation":  0.9965
+                                                                          },
+                                                                          {
+                                                                              "feature_a":  "role_change_count",
+                                                                              "feature_b":  "user_change_count",
+                                                                              "absolute_correlation":  0.969
+                                                                          }
+                                                                      ],
+                                    "mutual_information_ranking":  [
+                                                                       {
+                                                                           "feature":  "unique_entities_modified",
+                                                                           "mutual_information":  0.4728
+                                                                       },
+                                                                       {
+                                                                           "feature":  "sales_count",
+                                                                           "mutual_information":  0.4201
+                                                                       },
+                                                                       {
+                                                                           "feature":  "cancelled_sales_count",
+                                                                           "mutual_information":  0.2223
+                                                                       },
+                                                                       {
+                                                                           "feature":  "cancellation_ratio",
+                                                                           "mutual_information":  0.2082
+                                                                       },
+                                                                       {
+                                                                           "feature":  "failed_login_ratio",
+                                                                           "mutual_information":  0.196
+                                                                       },
+                                                                       {
+                                                                           "feature":  "failed_login_count",
+                                                                           "mutual_information":  0.1954
+                                                                       },
+                                                                       {
+                                                                           "feature":  "successful_login_count",
+                                                                           "mutual_information":  0.1655
+                                                                       },
+                                                                       {
+                                                                           "feature":  "sales_count_5m",
+                                                                           "mutual_information":  0.1636
+                                                                       },
+                                                                       {
+                                                                           "feature":  "sales_without_stock_link_count",
+                                                                           "mutual_information":  0.162
+                                                                       },
+                                                                       {
+                                                                           "feature":  "role_change_count",
+                                                                           "mutual_information":  0.096
+                                                                       },
+                                                                       {
+                                                                           "feature":  "user_change_count",
+                                                                           "mutual_information":  0.0845
+                                                                       },
+                                                                       {
+                                                                           "feature":  "admin_action_count",
+                                                                           "mutual_information":  0.0749
+                                                                       },
+                                                                       {
+                                                                           "feature":  "price_change_count",
+                                                                           "mutual_information":  0.0643
+                                                                       },
+                                                                       {
+                                                                           "feature":  "sales_after_price_change",
+                                                                           "mutual_information":  0.0596
+                                                                       },
+                                                                       {
+                                                                           "feature":  "stock_change_count",
+                                                                           "mutual_information":  0.0499
+                                                                       },
+                                                                       {
+                                                                           "feature":  "sales_after_stock_change",
+                                                                           "mutual_information":  0.0468
+                                                                       }
+                                                                   ],
+                                    "feature_means_by_label":  {
+                                                                   "0":  {
+                                                                             "failed_login_count":  0.0,
+                                                                             "successful_login_count":  0.2,
+                                                                             "failed_login_ratio":  0.0,
+                                                                             "sales_count_5m":  0.255,
+                                                                             "sales_count":  2.9,
+                                                                             "sales_without_stock_link_count":  0.6825,
+                                                                             "cancelled_sales_count":  0.0,
+                                                                             "cancellation_ratio":  0.0,
+                                                                             "stock_change_count":  0.2,
+                                                                             "price_change_count":  0.2,
+                                                                             "admin_action_count":  0.0,
+                                                                             "role_change_count":  0.0,
+                                                                             "user_change_count":  0.0,
+                                                                             "sales_after_stock_change":  0.2,
+                                                                             "sales_after_price_change":  0.175,
+                                                                             "unique_entities_modified":  4.3
+                                                                         },
+                                                                   "1":  {
+                                                                             "failed_login_count":  2.0,
+                                                                             "successful_login_count":  0.75,
+                                                                             "failed_login_ratio":  0.3476,
+                                                                             "sales_count_5m":  0.75,
+                                                                             "sales_count":  1.8925,
+                                                                             "sales_without_stock_link_count":  0.0,
+                                                                             "cancelled_sales_count":  1.8925,
+                                                                             "cancellation_ratio":  0.25,
+                                                                             "stock_change_count":  0.0,
+                                                                             "price_change_count":  0.0,
+                                                                             "admin_action_count":  1.2525,
+                                                                             "role_change_count":  0.4125,
+                                                                             "user_change_count":  0.84,
+                                                                             "sales_after_stock_change":  0.0,
+                                                                             "sales_after_price_change":  0.0,
+                                                                             "unique_entities_modified":  3.9575
+                                                                         }
+                                                               }
+                                },
+    "tree_parameters":  {
+                            "criterion":  "gini",
+                            "splitter":  "best",
+                            "max_depth":  5,
+                            "min_samples_leaf":  5,
+                            "random_state":  42
+                        },
+    "grouped_holdout":  {
+                            "strategy":  "GroupShuffleSplit por familia de escenario",
+                            "train_rows":  540,
+                            "test_rows":  260,
+                            "train_families":  [
+                                                   "admin_burst",
+                                                   "combined",
+                                                   "failed_logins",
+                                                   "normal_a",
+                                                   "normal_busy",
+                                                   "normal_sale_inventory_link"
+                                               ],
+                            "test_families":  [
+                                                  "cancellations",
+                                                  "normal_b",
+                                                  "normal_c"
+                                              ],
+                            "family_overlap":  [
+
+                                               ],
+                            "tree":  {
+                                         "accuracy":  0.6154,
+                                         "balanced_accuracy":  0.5,
+                                         "precision_anomaly":  0.0,
+                                         "recall_anomaly":  0.0,
+                                         "f1_anomaly":  0.0,
+                                         "f1_macro":  0.381,
+                                         "confusion_matrix_TN_FP_FN_TP":  [
+                                                                              [
+                                                                                  160,
+                                                                                  0
+                                                                              ],
+                                                                              [
+                                                                                  100,
+                                                                                  0
+                                                                              ]
+                                                                          ]
+                                     },
+                            "baseline_most_frequent":  {
+                                                           "accuracy":  0.3846,
+                                                           "balanced_accuracy":  0.5,
+                                                           "precision_anomaly":  0.3846,
+                                                           "recall_anomaly":  1.0,
+                                                           "f1_anomaly":  0.5556,
+                                                           "f1_macro":  0.2778,
+                                                           "confusion_matrix_TN_FP_FN_TP":  [
+                                                                                                [
+                                                                                                    0,
+                                                                                                    160
+                                                                                                ],
+                                                                                                [
+                                                                                                    0,
+                                                                                                    100
+                                                                                                ]
+                                                                                            ]
+                                                       },
+                            "tree_text":  "|--- successful_login_count \u003c= 0.50\n|   |--- class: 0\n|--- successful_login_count \u003e  0.50\n|   |--- stock_change_count \u003c= 0.50\n|   |   |--- class: 1\n|   |--- stock_change_count \u003e  0.50\n|   |   |--- class: 0\n",
+                            "feature_importances":  [
+                                                        {
+                                                            "feature":  "successful_login_count",
+                                                            "importance":  0.52632
+                                                        },
+                                                        {
+                                                            "feature":  "stock_change_count",
+                                                            "importance":  0.47368
+                                                        },
+                                                        {
+                                                            "feature":  "failed_login_count",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "failed_login_ratio",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "sales_count_5m",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "sales_count",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "sales_without_stock_link_count",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "cancelled_sales_count",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "cancellation_ratio",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "price_change_count",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "admin_action_count",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "role_change_count",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "user_change_count",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "sales_after_stock_change",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "sales_after_price_change",
+                                                            "importance":  0.0
+                                                        },
+                                                        {
+                                                            "feature":  "unique_entities_modified",
+                                                            "importance":  0.0
+                                                        }
+                                                    ],
+                            "ablation_without_successful_login_count":  {
+                                                                            "features":  [
+                                                                                             "failed_login_count",
+                                                                                             "failed_login_ratio",
+                                                                                             "sales_count_5m",
+                                                                                             "sales_count",
+                                                                                             "sales_without_stock_link_count",
+                                                                                             "cancelled_sales_count",
+                                                                                             "cancellation_ratio",
+                                                                                             "stock_change_count",
+                                                                                             "price_change_count",
+                                                                                             "admin_action_count",
+                                                                                             "role_change_count",
+                                                                                             "user_change_count",
+                                                                                             "sales_after_stock_change",
+                                                                                             "sales_after_price_change",
+                                                                                             "unique_entities_modified"
+                                                                                         ],
+                                                                            "metrics":  {
+                                                                                            "accuracy":  0.8692,
+                                                                                            "balanced_accuracy":  0.8938,
+                                                                                            "precision_anomaly":  0.7463,
+                                                                                            "recall_anomaly":  1.0,
+                                                                                            "f1_anomaly":  0.8547,
+                                                                                            "f1_macro":  0.8679,
+                                                                                            "confusion_matrix_TN_FP_FN_TP":  [
+                                                                                                                                 [
+                                                                                                                                     126,
+                                                                                                                                     34
+                                                                                                                                 ],
+                                                                                                                                 [
+                                                                                                                                     0,
+                                                                                                                                     100
+                                                                                                                                 ]
+                                                                                                                             ]
+                                                                                        },
+                                                                            "tree_text":  "|--- sales_count \u003c= 0.50\n|   |--- class: 1\n|--- sales_count \u003e  0.50\n|   |--- cancelled_sales_count \u003c= 1.50\n|   |   |--- class: 0\n|   |--- cancelled_sales_count \u003e  1.50\n|   |   |--- class: 1\n"
+                                                                        }
+                        },
+    "leave_one_family_out":  {
+                                 "strategy":  "LeaveOneGroupOut por familia de escenario",
+                                 "metrics":  {
+                                                 "accuracy":  0.525,
+                                                 "balanced_accuracy":  0.525,
+                                                 "precision_anomaly":  0.5556,
+                                                 "recall_anomaly":  0.25,
+                                                 "f1_anomaly":  0.3448,
+                                                 "f1_macro":  0.4861,
+                                                 "confusion_matrix_TN_FP_FN_TP":  [
+                                                                                      [
+                                                                                          320,
+                                                                                          80
+                                                                                      ],
+                                                                                      [
+                                                                                          300,
+                                                                                          100
+                                                                                      ]
+                                                                                  ]
+                                             },
+                                 "baseline_most_frequent":  {
+                                                                "accuracy":  0.0,
+                                                                "balanced_accuracy":  0.0,
+                                                                "precision_anomaly":  0.0,
+                                                                "recall_anomaly":  0.0,
+                                                                "f1_anomaly":  0.0,
+                                                                "f1_macro":  0.0,
+                                                                "confusion_matrix_TN_FP_FN_TP":  [
+                                                                                                     [
+                                                                                                         0,
+                                                                                                         400
+                                                                                                     ],
+                                                                                                     [
+                                                                                                         400,
+                                                                                                         0
+                                                                                                     ]
+                                                                                                 ]
+                                                            },
+                                 "families":  [
+                                                  {
+                                                      "scenario":  "admin_burst",
+                                                      "true_label":  1,
+                                                      "rows":  100,
+                                                      "anomaly_predictions":  0,
+                                                      "anomaly_prediction_rate":  0.0,
+                                                      "correct_predictions":  0,
+                                                      "accuracy":  0.0
+                                                  },
+                                                  {
+                                                      "scenario":  "cancellations",
+                                                      "true_label":  1,
+                                                      "rows":  100,
+                                                      "anomaly_predictions":  0,
+                                                      "anomaly_prediction_rate":  0.0,
+                                                      "correct_predictions":  0,
+                                                      "accuracy":  0.0
+                                                  },
+                                                  {
+                                                      "scenario":  "combined",
+                                                      "true_label":  1,
+                                                      "rows":  100,
+                                                      "anomaly_predictions":  100,
+                                                      "anomaly_prediction_rate":  1.0,
+                                                      "correct_predictions":  100,
+                                                      "accuracy":  1.0
+                                                  },
+                                                  {
+                                                      "scenario":  "failed_logins",
+                                                      "true_label":  1,
+                                                      "rows":  100,
+                                                      "anomaly_predictions":  0,
+                                                      "anomaly_prediction_rate":  0.0,
+                                                      "correct_predictions":  0,
+                                                      "accuracy":  0.0
+                                                  },
+                                                  {
+                                                      "scenario":  "normal_a",
+                                                      "true_label":  0,
+                                                      "rows":  80,
+                                                      "anomaly_predictions":  0,
+                                                      "anomaly_prediction_rate":  0.0,
+                                                      "correct_predictions":  80,
+                                                      "accuracy":  1.0
+                                                  },
+                                                  {
+                                                      "scenario":  "normal_b",
+                                                      "true_label":  0,
+                                                      "rows":  80,
+                                                      "anomaly_predictions":  0,
+                                                      "anomaly_prediction_rate":  0.0,
+                                                      "correct_predictions":  80,
+                                                      "accuracy":  1.0
+                                                  },
+                                                  {
+                                                      "scenario":  "normal_busy",
+                                                      "true_label":  0,
+                                                      "rows":  80,
+                                                      "anomaly_predictions":  0,
+                                                      "anomaly_prediction_rate":  0.0,
+                                                      "correct_predictions":  80,
+                                                      "accuracy":  1.0
+                                                  },
+                                                  {
+                                                      "scenario":  "normal_c",
+                                                      "true_label":  0,
+                                                      "rows":  80,
+                                                      "anomaly_predictions":  0,
+                                                      "anomaly_prediction_rate":  0.0,
+                                                      "correct_predictions":  80,
+                                                      "accuracy":  1.0
+                                                  },
+                                                  {
+                                                      "scenario":  "normal_sale_inventory_link",
+                                                      "true_label":  0,
+                                                      "rows":  80,
+                                                      "anomaly_predictions":  80,
+                                                      "anomaly_prediction_rate":  1.0,
+                                                      "correct_predictions":  0,
+                                                      "accuracy":  0.0
+                                                  }
+                                              ]
+                             },
+    "limitations":  [
+                        "Las etiquetas se asignan por escenario sint?tico, no por fraude real verificado.",
+                        "Los resultados miden desempe?o en escenarios generados y no acreditan generalizaci?n a datos reales.",
+                        "La informaci?n mutua y las correlaciones son an?lisis exploratorios; no justifican por s? solas eliminar variables.",
+                        "El dataset candidato se gener? en memoria y no reemplaza el CSV publicado.",
+                        "El modelo evaluado no se ha publicado ni persistido."
+                    ],
+    "integrity":  {
+                      "generated_in_memory":  true,
+                      "csv_published_modified":  false,
+                      "model_published_modified":  false,
+                      "metadata_modified":  false,
+                      "training_database_modified":  false
+                  }
+}

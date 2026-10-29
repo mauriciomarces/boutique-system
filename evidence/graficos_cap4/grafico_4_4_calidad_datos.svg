@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560">
+<rect width="100%" height="100%" fill="white"/>
+<text x="500.0" y="35" text-anchor="middle" font-family="Arial" font-size="21" font-weight="bold">Gráfico 4.4. Distribución y duplicación del conjunto V3</text>
+<text x="280" y="100" text-anchor="middle" font-family="Arial" font-size="17" font-weight="bold">Clases</text>
+<rect x="100" y="170" width="300.0" height="45" fill="#557fa3"/>
+<text x="428.0" y="198" text-anchor="start" font-family="Arial" font-size="14" font-weight="normal">560</text>
+<text x="100" y="160" text-anchor="start" font-family="Arial" font-size="13" font-weight="normal">Normales</text>
+<rect x="100" y="285" width="128.57142857142858" height="45" fill="#557fa3"/>
+<text x="256.57142857142856" y="313" text-anchor="start" font-family="Arial" font-size="14" font-weight="normal">240</text>
+<text x="100" y="275" text-anchor="start" font-family="Arial" font-size="13" font-weight="normal">Anómalos</text>
+<text x="760" y="100" text-anchor="middle" font-family="Arial" font-size="17" font-weight="bold">Repetición de vectores</text>
+<rect x="580" y="170" width="300.0" height="45" fill="#557fa3"/>
+<text x="908.0" y="198" text-anchor="start" font-family="Arial" font-size="14" font-weight="normal">452</text>
+<text x="580" y="160" text-anchor="start" font-family="Arial" font-size="13" font-weight="normal">No duplicados</text>
+<rect x="580" y="285" width="230.97345132743362" height="45" fill="#557fa3"/>
+<text x="838.9734513274336" y="313" text-anchor="start" font-family="Arial" font-size="14" font-weight="normal">348</text>
+<text x="580" y="275" text-anchor="start" font-family="Arial" font-size="13" font-weight="normal">Duplicados</text>
+<text x="500" y="500" text-anchor="middle" font-family="Arial" font-size="14" font-weight="normal">Total de casos: 800 | Características: 16</text>
+</svg>

@@ -1,85 +1,98 @@
-from app.config import FEATURE_COLUMNS, MODEL_FEATURE_COLUMNS
-from app.dataset import generate_training_frame, write_datasets
-from app.train_model import DatasetError, grouped_scenario_split, load_dataset, train_decision_tree
+import pandas as pd
+import pytest
+
+from app.config import MODEL_FEATURE_COLUMNS
+from app.train_model import (
+    DatasetError,
+    grouped_scenario_split,
+    load_dataset,
+    train_decision_tree,
+)
 
 
-def test_balanced_dataset_has_both_classes():
-    frame, summary, _events = generate_training_frame(random_state=42, normal_per_family=4, anomaly_per_family=3)
-    assert summary["n_normal"] > 0
-    assert summary["n_anomalo"] > 0
-    assert "label" in frame.columns
-    assert "label_source" in frame.columns
+def experimental_frame():
+    rows = []
+    for family_index in range(8):
+        family = f"familia_{family_index}"
+        for index in range(20):
+            label = index % 2
+            row = {column: 0 for column in MODEL_FEATURE_COLUMNS}
+            row["failed_login_count"] = (
+                (index % 5) + 5 if label else index % 3
+            )
+            row["sales_count_5m"] = (
+                (index % 6) + 6 if label else index % 4
+            )
+            row["unique_entities_modified"] = family_index * 20 + index + 1
+            row.update({
+                "label": label,
+                "scenario": family,
+                "case_id": f"{family}-{index}",
+            })
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def test_grouped_split_keeps_families_separate_and_both_classes():
+    frame = experimental_frame()
     train_indices, test_indices = grouped_scenario_split(frame, 0.25, 42)
-    train_scenarios = set(frame.iloc[train_indices]["scenario"])
-    test_scenarios = set(frame.iloc[test_indices]["scenario"])
-    assert train_scenarios.isdisjoint(test_scenarios)
-    for column in FEATURE_COLUMNS:
-        assert column in frame.columns
-    assert "anomaly_detected" not in frame.columns
+    train, test = frame.iloc[train_indices], frame.iloc[test_indices]
+
+    assert set(train["scenario"]).isdisjoint(set(test["scenario"]))
+    assert set(train["label"]) == {0, 1}
+    assert set(test["label"]) == {0, 1}
 
 
 def test_invalid_dataset_missing_label(tmp_path):
     path = tmp_path / "bad.csv"
     path.write_text("event_count_5m\n1\n", encoding="utf-8")
-    try:
+    with pytest.raises(DatasetError):
         load_dataset(path)
-        assert False, "expected DatasetError"
-    except DatasetError:
-        pass
 
 
-def test_write_and_train(tmp_path, monkeypatch):
-    from app import config
+def test_evaluation_does_not_publish_or_persist(tmp_path, monkeypatch):
     from app import train_model
 
-    monkeypatch.setattr(config, "DATASET_PATH", tmp_path / "sposabella_training.csv")
-    monkeypatch.setattr(config, "DATASET_IMBALANCED_PATH", tmp_path / "imbalanced.csv")
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    monkeypatch.setattr(config, "SYNTHETIC_DIR", tmp_path / "synthetic")
-    monkeypatch.setattr(config, "MODELS_DIR", tmp_path / "models")
-    monkeypatch.setattr(config, "METRICS_DIR", tmp_path / "metrics")
-    monkeypatch.setattr(config, "CURRENT_MODEL_PATH", tmp_path / "models" / "decision_tree.joblib")
-    monkeypatch.setattr(config, "CURRENT_METADATA_PATH", tmp_path / "models" / "model_metadata.json")
-    monkeypatch.setattr(train_model, "DATASET_PATH", config.DATASET_PATH)
-    monkeypatch.setattr(train_model, "MODELS_DIR", config.MODELS_DIR)
-    monkeypatch.setattr(train_model, "METRICS_DIR", config.METRICS_DIR)
-    monkeypatch.setattr(train_model, "CURRENT_MODEL_PATH", config.CURRENT_MODEL_PATH)
-    monkeypatch.setattr(train_model, "CURRENT_METADATA_PATH", config.CURRENT_METADATA_PATH)
+    dataset_path = tmp_path / "experimental.csv"
+    experimental_frame().to_csv(dataset_path, index=False)
 
-    from app import dataset as dataset_mod
+    models_dir = tmp_path / "models"
+    metrics_dir = tmp_path / "metrics"
+    models_dir.mkdir()
+    metrics_dir.mkdir()
 
-    monkeypatch.setattr(dataset_mod, "DATASET_PATH", config.DATASET_PATH)
-    monkeypatch.setattr(dataset_mod, "DATASET_IMBALANCED_PATH", config.DATASET_IMBALANCED_PATH)
-    monkeypatch.setattr(dataset_mod, "PROCESSED_DIR", tmp_path)
-    monkeypatch.setattr(dataset_mod, "SYNTHETIC_DIR", tmp_path / "synthetic")
+    current_model = models_dir / "decision_tree.joblib"
+    current_metadata = models_dir / "model_metadata.json"
+    current_model.write_bytes(b"model-sentinel")
+    current_metadata.write_bytes(b"metadata-sentinel")
 
-    manifest = write_datasets(random_state=42)
-    assert manifest["n_rows"] > 10
-    metadata = train_decision_tree(dataset_path=config.DATASET_PATH)
-    assert metadata["algoritmo"] == "DecisionTreeClassifier"
-    assert "accuracy" in metadata["metricas"]
-    assert "confusion_matrix" in metadata["metricas"]
-    assert "f1_por_clase" in metadata["metricas"]
-    assert "f1_macro" in metadata["metricas"]
-    assert "baseline_most_frequent" in metadata["metricas"]
-    assert metadata["metricas"]["scenario_groups_test"]
-    assert metadata["parametros"]["max_depth"] == 5
-    assert metadata["features"] == MODEL_FEATURE_COLUMNS
-    assert not {
-        "event_count_5m",
-        "event_count_10m",
-        "event_count_30m",
-        "events_per_minute",
-        "time_since_last_login",
-        "time_since_last_stock_change",
-        "time_since_last_price_change",
-        "failed_login_rule",
-        "cancellation_rule",
-        "stock_sale_rule",
-        "price_sale_rule",
-        "admin_activity_rule",
-        "combined_pattern_rule",
-        "risk_rule_count",
-    }.intersection(metadata["features"])
-    assert metadata["modelo_final_entrenado_con_dataset_completo"] is True
-    assert config.CURRENT_MODEL_PATH.exists()
+    monkeypatch.setattr(train_model, "MODELS_DIR", models_dir)
+    monkeypatch.setattr(train_model, "METRICS_DIR", metrics_dir)
+    monkeypatch.setattr(train_model, "CURRENT_MODEL_PATH", current_model)
+    monkeypatch.setattr(train_model, "CURRENT_METADATA_PATH", current_metadata)
+
+    result = train_decision_tree(dataset_path=dataset_path)
+
+    assert result["estado"] == "EVALUACION_EXPERIMENTAL"
+    assert result["model_path"] == ""
+    assert result["modelo_final_entrenado_con_dataset_completo"] is False
+    assert "confusion_matrix" in result["metricas"]
+    assert "f1_macro" in result["metricas"]
+    assert "baseline_most_frequent" in result["metricas"]
+    assert result["metricas"]["scenario_groups_test"]
+    assert result["features"] == list(MODEL_FEATURE_COLUMNS)
+
+    assert current_model.read_bytes() == b"model-sentinel"
+    assert current_metadata.read_bytes() == b"metadata-sentinel"
+    assert {p.name for p in models_dir.iterdir()} == {
+        "decision_tree.joblib",
+        "model_metadata.json",
+    }
+    assert list(metrics_dir.iterdir()) == []
+
+
+def test_grouped_split_rejects_too_few_families():
+    frame = experimental_frame()
+    frame = frame[frame["scenario"].isin(["familia_0", "familia_1"])]
+    with pytest.raises(DatasetError):
+        grouped_scenario_split(frame, 0.25, 42)

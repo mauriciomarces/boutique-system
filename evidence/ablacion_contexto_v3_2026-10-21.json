@@ -1,0 +1,98 @@
+{
+    "title":  "Ablacion experimental de contexto V3",
+    "date":  "2026-10-21",
+    "status":  "exploratory_in_memory",
+    "generator":  "generate_expansion_v3.py",
+    "n_cases":  800,
+    "label_origin":  "Etiquetas sinteticas asignadas por escenario programado; no son fraude real verificado.",
+    "split":  {
+                  "strategy":  "grouped_scenario_split",
+                  "random_state":  42,
+                  "train_rows":  600,
+                  "test_rows":  200,
+                  "train_families":  [
+                                         "administracion",
+                                         "anulaciones",
+                                         "autenticacion",
+                                         "consistencia_inventario",
+                                         "precio_venta",
+                                         "velocidad_ventas"
+                                     ],
+                  "test_families":  [
+                                        "alcance_administrativo",
+                                        "patron_combinado"
+                                    ],
+                  "family_overlap":  false
+              },
+    "label_consistency":  {
+                              "base_discrepancies":  0,
+                              "contextual_discrepancies":  0
+                          },
+    "evaluation":  {
+                       "base":  {
+                                    "accuracy":  0.92,
+                                    "balanced_accuracy":  0.8667,
+                                    "precision_anomaly":  1,
+                                    "recall_anomaly":  0.7333,
+                                    "f1_anomaly":  0.8462,
+                                    "f1_macro":  0.896,
+                                    "confusion_matrix_TN_FP_FN_TP":  [
+                                                                         [
+                                                                             140,
+                                                                             0
+                                                                         ],
+                                                                         [
+                                                                             16,
+                                                                             44
+                                                                         ]
+                                                                     ]
+                                },
+                       "with_context":  {
+                                            "accuracy":  0.92,
+                                            "balanced_accuracy":  0.8667,
+                                            "precision_anomaly":  1,
+                                            "recall_anomaly":  0.7333,
+                                            "f1_anomaly":  0.8462,
+                                            "f1_macro":  0.896,
+                                            "confusion_matrix_TN_FP_FN_TP":  [
+                                                                                 [
+                                                                                     140,
+                                                                                     0
+                                                                                 ],
+                                                                                 [
+                                                                                     16,
+                                                                                     44
+                                                                                 ]
+                                                                             ]
+                                        },
+                       "majority_baseline":  {
+                                                 "f1_macro":  0.4118
+                                             },
+                       "delta_context_minus_base":  {
+                                                        "accuracy":  0,
+                                                        "balanced_accuracy":  0,
+                                                        "precision_anomaly":  0,
+                                                        "recall_anomaly":  0,
+                                                        "f1_anomaly":  0,
+                                                        "f1_macro":  0
+                                                    }
+                   },
+    "interpretation":  [
+                           "La variante contextual no mejoro las metricas frente a la variante base en esta particion.",
+                           "El resultado corresponde a familias sinteticas reservadas y no demuestra generalizacion a operaciones reales.",
+                           "La consistencia de etiquetas comprueba concordancia con las reglas sinteticas, no fraude real.",
+                           "El experimento se ejecuto en memoria y no publico un nuevo dataset ni un modelo."
+                       ],
+    "integrity":  {
+                      "dataset_csv_modified":  false,
+                      "model_published_modified":  false,
+                      "model_metadata_modified":  false,
+                      "training_database_modified":  false
+                  },
+    "reproduction":  {
+                         "generator_seed":  20261021,
+                         "split_seed":  42,
+                         "execution":  "Evaluacion en memoria dentro de ai-service",
+                         "note":  "Este registro documenta los resultados observados; no sustituye guardar el script exacto de evaluacion para una reproduccion independiente."
+                     }
+}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -62,23 +63,46 @@ def grouped_scenario_split(
     test_size: float,
     random_state: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    groups = frame["scenario"].astype(str)
-    labels_by_group = frame.assign(_group=groups).groupby("_group")["label"].nunique()
-    if (labels_by_group != 1).any():
-        raise DatasetError("Cada familia de escenario debe tener una única etiqueta.")
+    if "scenario" not in frame.columns or "label" not in frame.columns:
+        raise DatasetError("Se requieren las columnas scenario y label.")
+    if not 0 < test_size < 1:
+        raise DatasetError("test_size debe estar entre 0 y 1.")
+    if frame["scenario"].isna().any() or frame["label"].isna().any():
+        raise DatasetError("scenario y label no pueden contener valores nulos.")
+    if not set(frame["label"].unique()).issubset({0, 1}):
+        raise DatasetError("label solo puede contener 0 y 1.")
 
-    for seed in range(random_state, random_state + 100):
-        splitter = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
-        train_indices, test_indices = next(splitter.split(frame, frame["label"], groups))
+    groups = frame["scenario"].astype(str)
+    if groups.nunique() < 3:
+        raise DatasetError(
+            "Se requieren al menos tres familias para una evaluacion agrupada."
+        )
+
+    for seed in range(random_state, random_state + 200):
+        splitter = GroupShuffleSplit(
+            n_splits=1,
+            test_size=test_size,
+            random_state=seed,
+        )
+        train_indices, test_indices = next(
+            splitter.split(frame, frame["label"], groups)
+        )
+        train = frame.iloc[train_indices]
+        test = frame.iloc[test_indices]
+
         if (
-            set(frame.iloc[train_indices]["label"]) == {0, 1}
-            and set(frame.iloc[test_indices]["label"]) == {0, 1}
+            set(train["scenario"].astype(str)).isdisjoint(
+                set(test["scenario"].astype(str))
+            )
+            and set(train["label"]) == {0, 1}
+            and set(test["label"]) == {0, 1}
         ):
             return train_indices, test_indices
-    raise DatasetError(
-        "No se pudo construir una evaluación agrupada con ambas clases en entrenamiento y prueba."
-    )
 
+    raise DatasetError(
+        "No se pudo separar por familias manteniendo ambas clases "
+        "en entrenamiento y prueba."
+    )
 
 def classification_metrics(y_true: pd.Series, y_pred: np.ndarray) -> dict[str, Any]:
     return {
@@ -110,102 +134,125 @@ def classification_metrics(y_true: pd.Series, y_pred: np.ndarray) -> dict[str, A
     }
 
 
-def train_decision_tree(
-    dataset_path: Path | None = None,
-    params: dict[str, Any] | None = None,
-    dataset_version: str = "dataset-v1",
-) -> dict[str, Any]:
-    frame = load_dataset(dataset_path)
-    tree_params = {**DEFAULT_TREE_PARAMS, **(params or {})}
-    x = frame[MODEL_FEATURE_COLUMNS]
-    y = frame["label"]
-    random_state = int(tree_params.get("random_state", 42))
-    train_indices, test_indices = grouped_scenario_split(frame, 0.25, random_state)
-    x_train, x_test = x.iloc[train_indices], x.iloc[test_indices]
-    y_train, y_test = y.iloc[train_indices], y.iloc[test_indices]
-    evaluation_model = DecisionTreeClassifier(**tree_params)
-    evaluation_model.fit(x_train, y_train)
-    y_pred = evaluation_model.predict(x_test)
-
-    metrics = classification_metrics(y_test, y_pred)
-    baseline = DummyClassifier(strategy="most_frequent")
-    baseline.fit(x_train, y_train)
-    baseline_metrics = classification_metrics(y_test, baseline.predict(x_test))
-    train_scenarios = sorted(frame.iloc[train_indices]["scenario"].astype(str).unique().tolist())
-    test_scenarios = sorted(frame.iloc[test_indices]["scenario"].astype(str).unique().tolist())
-    metrics.update(
-        {
-            "n_train": int(len(x_train)),
-            "n_test": int(len(x_test)),
-            "split_strategy": "GroupShuffleSplit por familia de escenario",
-            "scenario_groups_train": train_scenarios,
-            "scenario_groups_test": test_scenarios,
-            "baseline_most_frequent": baseline_metrics,
-            "f1_macro_delta_vs_baseline": float(
-                metrics["f1_macro"] - baseline_metrics["f1_macro"]
-            ),
-        }
+def publication_decision(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Controles técnicos mínimos para decidir la publicación."""
+    anomaly_recall = float(
+        metrics.get("recall_por_clase", {}).get("ANOMALO", 0.0)
     )
+    macro_f1_delta = float(metrics.get("f1_macro_delta_vs_baseline", 0.0))
 
-    model = DecisionTreeClassifier(**tree_params)
-    model.fit(x, y)
-    importances = {
-        column: float(value)
-        for column, value in zip(MODEL_FEATURE_COLUMNS, model.feature_importances_)
+    checks = {
+        "detecta_al_menos_una_anomalia": anomaly_recall > 0.0,
+        "supera_f1_macro_baseline": macro_f1_delta > 0.0,
     }
+    reasons = []
+    if not checks["detecta_al_menos_una_anomalia"]:
+        reasons.append(
+            "El candidato no detecta anomalías en el conjunto de prueba."
+        )
+    if not checks["supera_f1_macro_baseline"]:
+        reasons.append(
+            "El F1 macro no supera al clasificador de referencia."
+        )
 
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    METRICS_DIR.mkdir(parents=True, exist_ok=True)
-
-    next_index = next_model_index()
-    model_version = f"v{next_index}"
-    version_dir = MODELS_DIR / model_version
-    version_dir.mkdir(parents=True, exist_ok=True)
-    model_path = version_dir / "decision_tree.joblib"
-    joblib.dump(model, model_path)
-    joblib.dump(model, CURRENT_MODEL_PATH)
-
-    training_timestamp = datetime.now(timezone.utc)
-    trained_at = training_timestamp.isoformat()
-    metadata = {
-        "training_id": f"train-{model_version}-{training_timestamp.strftime('%Y%m%dT%H%M%S%fZ')}",
-        "model_version": model_version,
-        "dataset_version": dataset_version,
-        "fecha_entrenamiento": trained_at,
-        "algoritmo": "DecisionTreeClassifier",
-        "parametros": tree_params,
-        "features": MODEL_FEATURE_COLUMNS,
-        "cantidad_registros": int(len(frame)),
-        "cantidad_features": len(MODEL_FEATURE_COLUMNS),
-        "modelo_final_entrenado_con_dataset_completo": True,
-        "metricas": metrics,
-        "feature_importances": importances,
-        "model_path": str(model_path),
-        "dataset_path": str(dataset_path or DATASET_PATH),
-        "estado": "COMPLETADO",
-        "nota_academica": (
-            "Etiquetas sintéticas asignadas por familia de escenario, no por registros "
-            "reales ni por reglas automáticas. El conjunto de prueba mantiene familias "
-            "completas fuera del entrenamiento; al ser datos sintéticos, no demuestra "
-            "generalización a actividad real ni constituye prueba de fraude."
+    return {
+        "aprobado": all(checks.values()),
+        "controles": checks,
+        "motivos_rechazo": reasons,
+        "naturaleza": (
+            "Controles técnicos mínimos. No certifican calidad para producción "
+            "ni demuestran detección de fraude real."
         ),
     }
 
-    (version_dir / "model_metadata.json").write_text(
-        json.dumps(metadata, indent=2),
-        encoding="utf-8",
+
+def train_decision_tree(
+    dataset_path: Path | None = None,
+    params: dict[str, Any] | None = None,
+    dataset_version: str = "dataset-experimental",
+) -> dict[str, Any]:
+    """Evalua un arbol en memoria, sin publicar ni persistir artefactos."""
+    frame = load_dataset(dataset_path)
+    tree_params = {**DEFAULT_TREE_PARAMS, **(params or {})}
+
+    train_indices, test_indices = grouped_scenario_split(
+        frame,
+        0.25,
+        int(tree_params.get("random_state", 42)),
     )
-    CURRENT_METADATA_PATH.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-    (METRICS_DIR / f"{model_version}.json").write_text(
-        json.dumps(metrics, indent=2),
-        encoding="utf-8",
+
+    x = frame[MODEL_FEATURE_COLUMNS]
+    y = frame["label"]
+    x_train, x_test = x.iloc[train_indices], x.iloc[test_indices]
+    y_train, y_test = y.iloc[train_indices], y.iloc[test_indices]
+
+    model = DecisionTreeClassifier(**tree_params)
+    model.fit(x_train, y_train)
+    predictions = model.predict(x_test)
+    metrics = classification_metrics(y_test, predictions)
+
+    baseline = DummyClassifier(strategy="most_frequent")
+    baseline.fit(x_train, y_train)
+    baseline_metrics = classification_metrics(
+        y_test, baseline.predict(x_test)
     )
 
-    init_db()
-    save_training_run(metadata)
+    train_scenarios = sorted(
+        frame.iloc[train_indices]["scenario"].astype(str).unique().tolist()
+    )
+    test_scenarios = sorted(
+        frame.iloc[test_indices]["scenario"].astype(str).unique().tolist()
+    )
 
-    return metadata
+    if not set(train_scenarios).isdisjoint(test_scenarios):
+        raise DatasetError("Se detecto solapamiento entre familias.")
 
+    metrics.update({
+        "n_train": int(len(train_indices)),
+        "n_test": int(len(test_indices)),
+        "split_strategy": "GroupShuffleSplit por familia de escenario",
+        "scenario_groups_train": train_scenarios,
+        "scenario_groups_test": test_scenarios,
+        "baseline_most_frequent": baseline_metrics,
+        "f1_macro_delta_vs_baseline": float(
+            metrics["f1_macro"] - baseline_metrics["f1_macro"]
+        ),
+    })
+
+    importances = {
+        column: float(value)
+        for column, value in zip(
+            MODEL_FEATURE_COLUMNS, model.feature_importances_
+        )
+    }
+
+    return {
+        "training_id": "evaluation-only",
+        "model_version": None,
+        "dataset_version": dataset_version,
+        "algoritmo": "DecisionTreeClassifier",
+        "parametros": tree_params,
+        "features": list(MODEL_FEATURE_COLUMNS),
+        "cantidad_registros": int(len(frame)),
+        "cantidad_features": len(MODEL_FEATURE_COLUMNS),
+        "modelo_final_entrenado_con_dataset_completo": False,
+        "metricas": metrics,
+        "feature_importances": importances,
+        "model_path": "",
+        "dataset_path": str(dataset_path or DATASET_PATH),
+        "estado": "EVALUACION_EXPERIMENTAL",
+        "publicacion": {
+            "aprobado": False,
+            "naturaleza": (
+                "Evaluacion experimental en memoria; no implica "
+                "publicacion ni deteccion de fraude real."
+            ),
+        },
+        "nota_academica": (
+            "Las etiquetas representan escenarios sinteticos previstos. "
+            "Los resultados no demuestran generalizacion a fraude real."
+        ),
+    }
 
 def next_model_index() -> int:
     existing = [
