@@ -1,4 +1,4 @@
-export interface CorrelationEvent {
+﻿export interface CorrelationEvent {
   event_id: string;
   service: string;
   usuario_id: number | null;
@@ -19,6 +19,8 @@ export interface AnalysisTrace {
   correlation: {
     features: Record<string, number>;
     rules: Record<string, { description: string; fired: boolean; value: number }>;
+    sequences?: Record<string, unknown>;
+    relations?: Record<string, unknown>;
   };
   classification: {
     clasificacion: "NORMAL" | "ANOMALO";
@@ -29,6 +31,7 @@ export interface AnalysisTrace {
     factores: string[];
     camino_arbol: string[];
   };
+  notification_status?: string;
 }
 
 export interface EventFilters {
@@ -42,6 +45,7 @@ export interface EventFilters {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem("sposabella_access_token");
   if (!token) throw new Error("Inicia sesión para consultar el análisis.");
+
   const response = await fetch(`/api${path}`, {
     ...init,
     headers: {
@@ -49,21 +53,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
     },
   });
+
   const payload = await response.json().catch(() => null);
+
   if (!response.ok) {
     const message = payload?.message ?? payload?.detail ?? payload?.error;
     throw new Error(
-      typeof message === "string" ? message : "No se pudo consultar el servicio de análisis.",
+      typeof message === "string"
+        ? message
+        : "No se pudo consultar el servicio de análisis.",
     );
   }
+
   return payload as T;
 }
 
 function query(filters: EventFilters) {
   const params = new URLSearchParams({ limit: "500" });
+
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
   }
+
   return params.toString();
 }
 
@@ -78,11 +89,25 @@ export function listAnalyses() {
 }
 
 export function classifyEvents(filters: EventFilters) {
+  const userId = filters.usuario_id?.trim();
+
+  if (
+    userId &&
+    userId !== "anonymous" &&
+    !/^[1-9]\d*$/.test(userId)
+  ) {
+    throw new Error("El identificador de usuario debe ser un entero positivo o Anónimo.");
+  }
   return request<AnalysisTrace>("/correlation/analyze-and-classify", {
     method: "POST",
     body: JSON.stringify({
       ...(filters.usuario_id
-        ? { usuario_id: filters.usuario_id === "anonymous" ? null : Number(filters.usuario_id) }
+        ? {
+            usuario_id:
+              filters.usuario_id === "anonymous"
+                ? null
+                : Number(filters.usuario_id),
+          }
         : {}),
       ...(filters.service ? { service: filters.service } : {}),
       ...(filters.tipo_evento ? { tipo_evento: filters.tipo_evento } : {}),
@@ -91,3 +116,4 @@ export function classifyEvents(filters: EventFilters) {
     }),
   });
 }
+

@@ -188,6 +188,7 @@ services:
     environment:
       PORT: 4006
       DATABASE_URL: mysql://boutique:secret@mysql-notifications:3306/boutique_notifications
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Configura JWT_ACCESS_SECRET en .env}
     volumes:
       - ./backend/services/notifications-service/src:/app/backend/services/notifications-service/src
       

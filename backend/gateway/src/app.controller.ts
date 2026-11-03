@@ -719,11 +719,77 @@ export class AppController {
     @Headers('authorization') authorization?: string,
   ) {
     await this.requireAnalysisPermission(authorization);
-    return this.microservicesService.post(
+
+    const headers = this.getForwardedHeaders(authorization);
+    const result = await this.microservicesService.post(
       'http://logic-correlation-service:4007/analyze-and-classify',
       body,
-      this.getForwardedHeaders(authorization),
+      headers,
     );
+
+    const analysis = result as {
+      analysis_id?: string;
+      event_ids?: string[];
+      classification?: {
+        clasificacion?: string;
+        nivel_riesgo?: string;
+        model_version?: string;
+        factores?: string[];
+      };
+    };
+
+    if (analysis?.classification?.clasificacion !== 'ANOMALO') {
+      return result;
+    }
+
+    try {
+      const notification = await this.microservicesService.post(
+        'http://notifications-service:4006/notificaciones/analisis-anomalo',
+        {
+          analysis_id: analysis.analysis_id,
+          nivel_riesgo: analysis.classification.nivel_riesgo,
+          model_version: analysis.classification.model_version,
+          factores: analysis.classification.factores,
+          event_ids: analysis.event_ids,
+        },
+        headers,
+      ) as { created?: boolean };
+
+      return {
+        ...analysis,
+        notification_status: notification.created
+          ? 'CREATED'
+          : 'ALREADY_EXISTS',
+      };
+    } catch (error: unknown) {
+      const detail = error as {
+        message?: string;
+        response?: {
+          status?: number;
+          data?: unknown;
+        };
+      };
+
+      const responseData = detail.response?.data;
+
+      console.error('[ANALYZE_AND_CLASSIFY] Error al crear la notificación:', {
+        message: detail.message ?? 'Error desconocido',
+        status: detail.response?.status ?? null,
+        response: responseData ?? null,
+      });
+
+      return {
+        ...analysis,
+        notification_status: 'ERROR',
+        notification_message:
+          'La clasificación se completó, pero falló la creación de la notificación.',
+        notification_error: {
+          message: detail.message ?? 'Error desconocido',
+          status: detail.response?.status ?? null,
+          response: responseData ?? null,
+        },
+      };
+    }
   }
 
   @Get('api/ai/health')
