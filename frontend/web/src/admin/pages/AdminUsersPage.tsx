@@ -3,6 +3,7 @@ import type { FormEvent, KeyboardEvent, ClipboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
 import LogoutButton from "../../auth/components/LogoutButton";
+import RolePermissionMatrix from "../components/RolePermissionMatrix";
 
 declare global {
   namespace JSX {
@@ -836,6 +837,7 @@ function AdminUsersPage() {
               </form>
             </section>
           ) : section === "permisos" ? (
+            <>
             <section className="glass soft-shadow rounded-2xl p-5">
               <h2 className="font-semibold theme-text">
                 Permisos del sistema
@@ -861,6 +863,13 @@ function AdminUsersPage() {
                 ))}
               </div>
             </section>
+            <RolePermissionMatrix
+              token={token ?? ""}
+              roles={roles}
+              permissions={permissions}
+              labels={permissionLabels}
+            />
+            </>
           ) : (
             <section className="glass soft-shadow overflow-hidden rounded-2xl">
               <div className="flex flex-col gap-4 border-b theme-border p-5 sm:flex-row sm:items-center sm:justify-between">

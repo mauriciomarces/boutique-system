@@ -9,6 +9,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { publishSystemEvent } = require('../../../contracts/event-publisher');
 const { verifiedActorId } = require('../../../contracts/event-actor');
+const { obtenerPermisosEfectivos } = require('./permisos');
 
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
@@ -3029,6 +3030,11 @@ app.get(
                     nombre: true,
                     descripcion: true,
                     estado: true,
+                    rol_permiso: {
+                      select: {
+                        permisos: { select: { nombre: true } },
+                      },
+                    },
                   },
                 },
               },
@@ -3048,7 +3054,10 @@ app.get(
         });
       }
 
-      res.json(buildUserPayload(usuario));
+      res.json({
+        ...buildUserPayload(usuario),
+        permisos: obtenerPermisosEfectivos(usuario),
+      });
     } catch (error) {
       console.error(
         'Error al consultar usuario autenticado:',

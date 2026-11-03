@@ -26,6 +26,7 @@ import AdminUsersPage from "./admin/pages/AdminUsersPage";
 import ErrorPage from "./components/ErrorPage";
 import AccountActivationPage from "./auth/pages/AccountActivationPage";
 import RequireAuth from "./auth/components/RequireAuth";
+import RequirePermission from "./auth/components/RequirePermission";
 import SessionMonitor from "./auth/components/SessionMonitor";
 
 import ClientsPage from "./clients/pages/ClientsPage";
@@ -149,55 +150,55 @@ function App() {
         />
         <Route
           path="/admin/usuarios"
-          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="USUARIOS_LEER"><AdminUsersPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion"
-          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="USUARIOS_LEER"><AdminUsersPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/usuarios"
-          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="USUARIOS_LEER"><AdminUsersPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/usuarios-inactivos"
-          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="USUARIOS_LEER"><AdminUsersPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/roles"
-          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="ROLES_LEER"><AdminUsersPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/permisos"
-          element={<RequireAuth><AdminUsersPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="PERMISOS_LEER"><AdminUsersPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/clientes"
-          element={<RequireAuth><ClientsPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="CLIENTES_LEER"><ClientsPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/productos"
-          element={<RequireAuth><ProductsPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="PRODUCTOS_LEER"><ProductsPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/categorias"
-          element={<RequireAuth><CategoriesPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="PRODUCTOS_LEER"><CategoriesPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/ventas"
-          element={<RequireAuth><SalesPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="VENTAS_LEER"><SalesPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/inventario"
-          element={<RequireAuth><InventoryPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="INVENTARIO_LEER"><InventoryPage /></RequirePermission></RequireAuth>}
 />
         <Route
           path="/administracion/compras"
-          element={<RequireAuth><PurchasesPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="INVENTARIO_LEER"><PurchasesPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/administracion/notificaciones"
-          element={<RequireAuth><NotificationsPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="NOTIFICACIONES_LEER"><NotificationsPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/analisis/entrenamiento"
