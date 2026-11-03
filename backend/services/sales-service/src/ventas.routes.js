@@ -406,6 +406,13 @@ module.exports = function registrarRutasVentas(app, prisma) {
               },
             );
           } catch (errorMovimiento) {
+            // Una respuesta HTTP explícita indica un rechazo conocido.
+            // Los errores de transporte o timeout pueden ser ambiguos.
+            if (Number.isInteger(errorMovimiento.status)) {
+              throw errorMovimiento;
+            }
+
+            // Solo se reintentan errores cuyo resultado podría ser incierto.
             try {
               movimiento = await inventoryRequest(
                 '/internal/ventas/movimientos',
@@ -416,11 +423,19 @@ module.exports = function registrarRutasVentas(app, prisma) {
                 },
               );
             } catch (errorReintento) {
+              if (Number.isInteger(errorReintento.status)) {
+                // El segundo intento recibió un rechazo HTTP explícito.
+                // El bloque exterior gestionará el fallo conocido.
+                throw errorReintento;
+              }
+
               inventarioIndeterminado = true;
+
               console.error(
                 'No se pudo determinar el resultado del movimiento de inventario:',
                 errorReintento,
               );
+
               throw errorReintento;
             }
           }

@@ -374,6 +374,100 @@ app.post(
   },
 );
 
+app.post('/notificaciones/analisis-anomalo', authenticateToken, async (req, res) => {
+  try {
+    const usuarioId = BigInt(req.auth.sub);
+    const {
+      analysis_id,
+      nivel_riesgo,
+      model_version,
+      factores,
+      event_ids,
+    } = req.body || {};
+
+    if (
+      typeof analysis_id !== 'string' ||
+      !analysis_id.trim() ||
+      analysis_id.length > 180
+    ) {
+      return res.status(400).json({
+        error: 'analysis_id es obligatorio y debe tener como máximo 180 caracteres',
+      });
+    }
+
+    const analysisId = analysis_id.trim();
+    const risk = typeof nivel_riesgo === 'string'
+      ? nivel_riesgo.slice(0, 50)
+      : 'NO_DEFINIDO';
+    const model = typeof model_version === 'string'
+      ? model_version.slice(0, 100)
+      : 'NO_DEFINIDO';
+    const factorList = Array.isArray(factores)
+      ? factores.filter((item) => typeof item === 'string').slice(0, 8)
+      : [];
+    const eventCount = Array.isArray(event_ids) ? event_ids.length : 0;
+    const referenceText = `Referencia del análisis: ${analysisId}.`;
+
+    const existing = await prisma.notificaciones.findFirst({
+      where: {
+        usuario_id: usuarioId,
+        tipo: 'ANOMALIA_DETECTADA',
+        referencia_tipo: 'ANALISIS_CART',
+        mensaje: { contains: referenceText },
+      },
+    });
+
+    if (existing) {
+      return res.json({
+        created: false,
+        notification: { id: existing.id.toString() },
+      });
+    }
+
+    const message = [
+      'Se detectó un comportamiento clasificado como ANOMALO.',
+      `Nivel de riesgo: ${risk}.`,
+      `Modelo: ${model}.`,
+      `Factores: ${factorList.length ? factorList.join('; ') : 'No especificados'}.`,
+      `Eventos relacionados: ${eventCount}.`,
+      referenceText,
+      'El resultado requiere revisión y no constituye una prueba concluyente de fraude.',
+    ].join(' ');
+
+    const numericReference = /^[1-9]\d*$/.test(analysisId)
+      ? BigInt(analysisId)
+      : null;
+
+    const created = await prisma.notificaciones.create({
+      data: {
+        usuario_id: usuarioId,
+        tipo: 'ANOMALIA_DETECTADA',
+        titulo: 'Comportamiento anómalo detectado',
+        mensaje: message,
+        canal: 'SISTEMA',
+        estado: 'PENDIENTE',
+        referencia_tipo: 'ANALISIS_CART',
+        referencia_id: numericReference,
+        enviado_en: null,
+        creado_en: new Date(),
+      },
+    });
+
+    return res.status(201).json({
+      created: true,
+      notification: { id: created.id.toString() },
+    });
+  } catch (error) {
+    console.error(
+      '[notifications-service] No se pudo registrar la alerta de análisis:',
+      error.message || error,
+    );
+
+    return res.status(500).json({
+      error: 'No se pudo registrar la alerta del análisis',
+    });
+  }
+});
 app.get('/notificaciones', authenticateToken, async (req, res) => {
   try {
     const usuarioId = BigInt(req.auth.sub);
