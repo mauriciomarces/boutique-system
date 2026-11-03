@@ -27,6 +27,7 @@ import ErrorPage from "./components/ErrorPage";
 import AccountActivationPage from "./auth/pages/AccountActivationPage";
 import RequireAuth from "./auth/components/RequireAuth";
 import RequirePermission from "./auth/components/RequirePermission";
+import PanelPage from "./panel/pages/PanelPage";
 import SessionMonitor from "./auth/components/SessionMonitor";
 
 import ClientsPage from "./clients/pages/ClientsPage";
@@ -143,6 +144,10 @@ function App() {
         <Route
           path="/activacion-cuenta"
           element={<AccountActivationPage />}
+        />
+        <Route
+          path="/panel"
+          element={<RequireAuth><PanelPage /></RequireAuth>}
         />
         <Route
           path="/cuenta"

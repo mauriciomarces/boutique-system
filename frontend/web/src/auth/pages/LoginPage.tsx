@@ -58,7 +58,7 @@ function LoginPage() {
         (role) => role.nombre === "ADMIN",
       );
 
-      navigate(hasAdminRole ? "/administracion/usuarios" : "/cuenta");
+      navigate(hasAdminRole ? "/administracion/usuarios" : "/panel");
     } catch (err) {
       setError(
         err instanceof Error
