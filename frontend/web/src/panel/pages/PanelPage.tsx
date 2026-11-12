@@ -6,7 +6,7 @@ import usePermissions from "../../auth/hooks/usePermissions";
 
 type StoredUser = {
   nombre?: string;
-  roles?: Array<{ nombre: string }>;
+  roles?: Array<{ nombre: string; estado?: string }>;
 };
 
 type ModuleAction = {
@@ -20,6 +20,7 @@ type PanelModule = {
   description: string;
   to: string;
   read: string;
+  allowedRoles?: string[];
   actions: ModuleAction[];
 };
 
@@ -68,6 +69,14 @@ const panelModules: PanelModule[] = [
     ],
   },
   {
+    title: "Reportes",
+    description: "Resumen de ventas e ingresos reales por período.",
+    to: "/administracion/reportes",
+    read: "VENTAS_LEER",
+    allowedRoles: ["ADMIN", "SUPERVISOR"],
+    actions: [],
+  },
+  {
     title: "Notificaciones",
     description: "Alertas y avisos del sistema.",
     to: "/administracion/notificaciones",
@@ -91,11 +100,30 @@ function readStoredUser(): StoredUser | null {
  */
 function PanelPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { loaded, can } = usePermissions();
+  const { loaded, can, hasRole, error } = usePermissions();
   const user = readStoredUser();
-  const roleNames = (user?.roles ?? []).map((role) => role.nombre).join(", ");
+  const activeRoles = (user?.roles ?? [])
+    .filter((role) => !role.estado || role.estado.toUpperCase() === "ACTIVO")
+    .map((role) => role.nombre.toUpperCase());
+  const roleNames = activeRoles.join(", ");
+  const panelTitle = activeRoles.includes("ADMIN")
+    ? "Panel de administración"
+    : activeRoles.includes("SUPERVISOR")
+      ? "Panel de supervisión"
+      : activeRoles.includes("INVENTARIO")
+        ? "Panel de inventario"
+        : activeRoles.includes("VENDEDOR")
+          ? "Panel de ventas"
+          : activeRoles.includes("CONSULTA")
+            ? "Panel de consulta"
+            : "Panel de trabajo";
 
-  const visibleModules = panelModules.filter((module) => can(module.read));
+  const visibleModules = panelModules.filter(
+    (module) =>
+      can(module.read) &&
+      (!module.allowedRoles ||
+        module.allowedRoles.some((role) => hasRole(role))),
+  );
   const quickActions = visibleModules.flatMap((module) =>
     module.actions
       .filter((action) => can(action.permission))
@@ -129,7 +157,7 @@ function PanelPage() {
 
         <header className="mt-8">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] theme-text-muted">
-            Panel
+            {panelTitle}
           </p>
           <h1 className="mt-2 text-3xl font-semibold theme-text">
             Hola{user?.nombre ? `, ${user.nombre}` : ""}
@@ -141,6 +169,12 @@ function PanelPage() {
 
         {!loaded ? (
           <p className="mt-10 theme-text-soft">Cargando tus módulos...</p>
+        ) : error ? (
+          <section role="alert" className="glass soft-shadow mt-10 rounded-2xl p-6">
+            <p className="theme-text">
+              No fue posible consultar tus permisos. Recarga la página o inicia sesión de nuevo.
+            </p>
+          </section>
         ) : visibleModules.length === 0 ? (
           <section className="glass soft-shadow mt-10 rounded-2xl p-6">
             <p className="theme-text">

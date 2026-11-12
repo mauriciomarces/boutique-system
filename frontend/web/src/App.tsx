@@ -40,6 +40,9 @@ import NotificationsPage from "./notifications/pages/NotificationsPage";
 import TrainingDashboardPage from "./analysis/pages/TrainingDashboardPage";
 import TrainingDetailPage from "./analysis/pages/TrainingDetailPage";
 import DetectionPage from "./analysis/pages/DetectionPage";
+import ReportsPage from "./reports/pages/ReportsPage";
+
+const reportAllowedRoles = ["ADMIN", "SUPERVISOR"];
 
 function LandingPage({
   darkMode,
@@ -206,16 +209,20 @@ function App() {
           element={<RequireAuth><RequirePermission permission="NOTIFICACIONES_LEER"><NotificationsPage /></RequirePermission></RequireAuth>}
         />
         <Route
+          path="/administracion/reportes"
+          element={<RequireAuth><RequirePermission permission="VENTAS_LEER" allowedRoles={reportAllowedRoles}><ReportsPage /></RequirePermission></RequireAuth>}
+        />
+        <Route
           path="/analisis/entrenamiento"
-          element={<RequireAuth><TrainingDashboardPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="USUARIOS_LEER"><TrainingDashboardPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/analisis/entrenamiento/:id"
-          element={<RequireAuth><TrainingDetailPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="USUARIOS_LEER"><TrainingDetailPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/analisis/deteccion"
-          element={<RequireAuth><DetectionPage /></RequireAuth>}
+          element={<RequireAuth><RequirePermission permission="USUARIOS_LEER"><DetectionPage /></RequirePermission></RequireAuth>}
         />
         <Route
           path="/error/400"
@@ -247,5 +254,3 @@ function App() {
 }
 
 export default App;
-
-

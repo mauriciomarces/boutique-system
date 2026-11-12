@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import ErrorPage from "../../components/ErrorPage";
 import {
   clearPermissionsCache,
+  fetchCurrentUserAccess,
   fetchEffectivePermissions,
   PermissionsError,
 } from "../services/permissions";
@@ -12,6 +13,7 @@ type Outcome = "allowed" | "denied" | "unauthenticated" | "error";
 
 type RequirePermissionProps = {
   permission: string;
+  allowedRoles?: string[];
   children: ReactNode;
 };
 
@@ -24,23 +26,72 @@ type RequirePermissionProps = {
  */
 export default function RequirePermission({
   permission,
+  allowedRoles,
   children,
 }: RequirePermissionProps) {
   const location = useLocation();
-  const requestKey = `${permission}|${location.pathname}`;
+  const [sessionRevision, setSessionRevision] = useState(0);
+  const requestKey = `${permission}|${location.pathname}|${sessionRevision}`;
   const [result, setResult] = useState<{ key: string; outcome: Outcome } | null>(
     null,
   );
 
   useEffect(() => {
+    const handleSessionChange = () => {
+      setSessionRevision((revision) => revision + 1);
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === "sposabella_access_token" ||
+        event.key === "sposabella_user" ||
+        event.key === null
+      ) {
+        handleSessionChange();
+      }
+    };
+
+    window.addEventListener(
+      "sposabella:auth-session-changed",
+      handleSessionChange,
+    );
+    window.addEventListener(
+      "sposabella:permissions-updated",
+      handleSessionChange,
+    );
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(
+        "sposabella:auth-session-changed",
+        handleSessionChange,
+      );
+      window.removeEventListener(
+        "sposabella:permissions-updated",
+        handleSessionChange,
+      );
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
-    fetchEffectivePermissions()
-      .then((permisos) => {
+    Promise.all([fetchEffectivePermissions(), fetchCurrentUserAccess()])
+      .then(([permisos, access]) => {
         if (cancelled) return;
+        const roleAllowed =
+          !allowedRoles ||
+          access.user.roles.some(
+            (role) =>
+              role.estado.toUpperCase() === "ACTIVO" &&
+              allowedRoles.some(
+                (allowedRole) =>
+                  allowedRole.toUpperCase() === role.nombre.toUpperCase(),
+              ),
+          );
         setResult({
           key: requestKey,
-          outcome: permisos.has(permission) ? "allowed" : "denied",
+          outcome:
+            permisos.has(permission) && roleAllowed ? "allowed" : "denied",
         });
       })
       .catch((error: unknown) => {
@@ -63,7 +114,7 @@ export default function RequirePermission({
     return () => {
       cancelled = true;
     };
-  }, [permission, requestKey]);
+  }, [permission, requestKey, allowedRoles]);
 
   const outcome = result?.key === requestKey ? result.outcome : null;
 

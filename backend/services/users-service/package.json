@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "seed:role-test-users": "node scripts/seed-role-test-users.js"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.9.1",

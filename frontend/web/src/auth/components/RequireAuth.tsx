@@ -16,7 +16,7 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
         if (!token) throw new Error("No hay sesión");
 
         const expiration = getTokenExpiration(token);
-        if (expiration === null || expiration <= Date.now() + 60000) {
+        if (expiration === null || expiration <= Date.now()) {
           await renewSession();
         }
 

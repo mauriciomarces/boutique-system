@@ -15,6 +15,7 @@ const ACTIVITY_THROTTLE_MS = 1000;
 
 const PRIVATE_PATHS = [
   "/cuenta",
+  "/panel",
   "/admin/usuarios",
   "/administracion",
   "/analisis",
@@ -29,9 +30,10 @@ function isPrivatePath(path: string) {
 export default function SessionMonitor() {
   const location = useLocation();
   const navigate = useNavigate();
+  const privateRoute = isPrivatePath(location.pathname);
 
   useEffect(() => {
-    if (!isPrivatePath(location.pathname)) return;
+    if (!privateRoute) return;
 
     let disposed = false;
     let loggingOut = false;
@@ -201,6 +203,15 @@ export default function SessionMonitor() {
       scheduleRefresh();
     }
 
+    function handleAuthSessionChanged() {
+      if (!getAccessToken()) {
+        forceLogout();
+        return;
+      }
+
+      scheduleRefresh();
+    }
+
     // Una sesión anterior a esta implementación no tendrá esta clave.
     // En ese caso, se inicia el seguimiento desde ahora.
     if (localStorage.getItem(LAST_ACTIVITY_KEY) === null) {
@@ -227,6 +238,10 @@ export default function SessionMonitor() {
     });
 
     window.addEventListener("storage", handleStorage);
+    window.addEventListener(
+      "sposabella:auth-session-changed",
+      handleAuthSessionChanged,
+    );
     document.addEventListener(
       "visibilitychange",
       handleVisibilityChange,
@@ -246,12 +261,16 @@ export default function SessionMonitor() {
       });
 
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(
+        "sposabella:auth-session-changed",
+        handleAuthSessionChanged,
+      );
       document.removeEventListener(
         "visibilitychange",
         handleVisibilityChange,
       );
     };
-  }, [location.pathname, navigate]);
+  }, [privateRoute, navigate]);
 
   return null;
 }

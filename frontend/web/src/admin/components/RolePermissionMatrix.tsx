@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchEffectivePermissions } from "../../auth/services/permissions";
+import {
+  fetchEffectivePermissions,
+  notifyPermissionsUpdated,
+} from "../../auth/services/permissions";
 
 interface Permission {
   id: string;
@@ -69,7 +72,7 @@ function RolePermissionMatrix({
   const assignableRoles = useMemo(
     () =>
       roles.filter(
-        (role) => role.nombre !== "ADMIN" && role.estado === "ACTIVO",
+        (role) => role.estado === "ACTIVO",
       ),
     [roles],
   );
@@ -82,6 +85,7 @@ function RolePermissionMatrix({
   const [loaded, setLoaded] = useState<{
     roleId: string;
     assigned: Set<string>;
+    recommended: Set<string>;
     error: string | null;
   } | null>(null);
 
@@ -93,6 +97,7 @@ function RolePermissionMatrix({
   const selectedRole =
     assignableRoles.find((role) => role.id === activeRoleId) ?? null;
 
+  const isAdminRole = selectedRole?.nombre.toUpperCase() === "ADMIN";
   const loadingRole = activeRoleId !== "" && loaded?.roleId !== activeRoleId;
   const assigned =
     loaded && loaded.roleId === activeRoleId ? loaded.assigned : new Set<string>();
@@ -118,12 +123,19 @@ function RolePermissionMatrix({
 
     let cancelled = false;
 
-    request<Permission[]>(`/roles/${activeRoleId}/permisos`, token)
-      .then((list) => {
+    Promise.all([
+      request<Permission[]>(`/roles/${activeRoleId}/permisos`, token),
+      request<Permission[]>(
+        `/roles/${activeRoleId}/permisos/recomendados`,
+        token,
+      ),
+    ])
+      .then(([list, recommended]) => {
         if (cancelled) return;
         setLoaded({
           roleId: activeRoleId,
           assigned: new Set(list.map((p) => p.id)),
+          recommended: new Set(recommended.map((p) => p.id)),
           error: null,
         });
       })
@@ -132,6 +144,7 @@ function RolePermissionMatrix({
         setLoaded({
           roleId: activeRoleId,
           assigned: new Set(),
+          recommended: new Set(),
           error: errorText(error),
         });
       });
@@ -145,7 +158,7 @@ function RolePermissionMatrix({
     loaded && loaded.roleId === activeRoleId ? loaded.error : null;
 
   const togglePermission = async (permission: Permission) => {
-    if (!selectedRole) return;
+    if (!selectedRole || selectedRole.nombre.toUpperCase() === "ADMIN") return;
 
     const isAssigned = assigned.has(permission.id);
     setSavingId(permission.id);
@@ -172,6 +185,7 @@ function RolePermissionMatrix({
         else next.add(permission.id);
         return { ...previous, assigned: next };
       });
+      notifyPermissionsUpdated();
 
       setMessage({
         type: "notice",
@@ -183,6 +197,41 @@ function RolePermissionMatrix({
       setSavingId(null);
     }
   };
+
+  const applyRecommended = async () => {
+    if (!selectedRole || !canAssign || isAdminRole) return;
+    setSavingId("__template__");
+    setMessage(null);
+
+    try {
+      const applied = await request<Permission[]>(
+        `/roles/${selectedRole.id}/permisos/plantilla`,
+        token,
+        { method: "POST" },
+      );
+      setLoaded((previous) => {
+        if (!previous || previous.roleId !== selectedRole.id) return previous;
+        return {
+          ...previous,
+          assigned: new Set(applied.map((permission) => permission.id)),
+        };
+      });
+      notifyPermissionsUpdated();
+      setMessage({
+        type: "notice",
+        text: `Plantilla recomendada aplicada a ${selectedRole.nombre}.`,
+      });
+    } catch (error) {
+      setMessage({ type: "error", text: errorText(error) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const recommended =
+    loaded && loaded.roleId === activeRoleId
+      ? loaded.recommended
+      : new Set<string>();
 
   return (
     <section className="glass soft-shadow mt-6 rounded-2xl p-5">
@@ -211,6 +260,34 @@ function RolePermissionMatrix({
         </select>
       </div>
 
+      {selectedRole && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm theme-text-soft">
+            Plantilla recomendada desde el catálogo actual del backend.
+            {selectedRole.nombre.toUpperCase() === "ADMIN" &&
+              " ADMIN obtiene siempre todos los permisos activos del catálogo."}
+          </p>
+          <button
+            type="button"
+            onClick={() => void applyRecommended()}
+            disabled={!canAssign || isAdminRole || loadingRole || savingId !== null}
+            className="theme-button-dark rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Aplicar plantilla recomendada
+          </button>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-3 text-xs theme-text-soft">
+        <span className="rounded-full bg-[var(--bg-secondary)] px-3 py-1">
+          Recomendado
+        </span>
+        <span className="rounded-full border border-amber-400 px-3 py-1">
+          Personalizado
+        </span>
+        <span>El resto no está incluido en la plantilla.</span>
+      </div>
+
       {!canAssign && (
         <p className="mt-4 rounded-xl bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text-soft">
           Tu cuenta no tiene el permiso ROLES_ASIGNAR_PERMISOS. Puedes consultar, pero no modificar.
@@ -237,9 +314,15 @@ function RolePermissionMatrix({
       ) : (
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {permissions.map((permission) => {
-            const checked = assigned.has(permission.id);
+            const isAdmin = selectedRole?.nombre.toUpperCase() === "ADMIN";
+            const checked = isAdmin || assigned.has(permission.id);
+            const isRecommended = recommended.has(permission.id);
             const disabled =
-              !canAssign || !selectedRole || loadingRole || savingId !== null;
+              !canAssign ||
+              !selectedRole ||
+              isAdmin ||
+              loadingRole ||
+              savingId !== null;
 
             return (
               <label
@@ -262,6 +345,21 @@ function RolePermissionMatrix({
                   </span>
                   <span className="mt-1 block text-xs theme-text-soft">
                     {permission.nombre}
+                  </span>
+                  <span
+                    className={`mt-2 inline-block rounded-full px-2 py-1 text-[10px] font-semibold ${
+                      isRecommended
+                        ? "bg-[#e9f6ef] text-[#47745f]"
+                        : checked
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-[var(--bg-secondary)] theme-text-muted"
+                    }`}
+                  >
+                    {isRecommended
+                      ? "Recomendado"
+                      : checked
+                        ? "Personalizado"
+                        : "No recomendado"}
                   </span>
                 </span>
               </label>

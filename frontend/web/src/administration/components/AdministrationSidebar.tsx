@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { fetchEffectivePermissions } from "../../auth/services/permissions";
+import usePermissions from "../../auth/hooks/usePermissions";
 
 type AdministrationSidebarProps = {
   sidebarOpen: boolean;
@@ -12,6 +11,7 @@ type NavItem = {
   path: string;
   /** Permiso requerido para mostrar la opción. Sin valor: visible para cualquier sesión. */
   permission?: string;
+  allowedRoles?: string[];
 };
 
 type NavGroup = {
@@ -39,13 +39,19 @@ const navGroups: NavGroup[] = [
       { label: "Compras", path: "/administracion/compras", permission: "INVENTARIO_LEER" },
       { label: "Ventas", path: "/administracion/ventas", permission: "VENTAS_LEER" },
       { label: "Notificaciones", path: "/administracion/notificaciones", permission: "NOTIFICACIONES_LEER" },
+      {
+        label: "Reportes",
+        path: "/administracion/reportes",
+        permission: "VENTAS_LEER",
+        allowedRoles: ["ADMIN", "SUPERVISOR"],
+      },
     ],
   },
   {
     title: "Análisis e IA",
     items: [
-      { label: "Entrenamiento", path: "/analisis/entrenamiento" },
-      { label: "Detección", path: "/analisis/deteccion" },
+      { label: "Entrenamiento", path: "/analisis/entrenamiento", permission: "USUARIOS_LEER" },
+      { label: "Detección", path: "/analisis/deteccion", permission: "USUARIOS_LEER" },
     ],
   },
 ];
@@ -56,24 +62,7 @@ function AdministrationSidebar({
 }: AdministrationSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [permisos, setPermisos] = useState<Set<string> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchEffectivePermissions()
-      .then((set) => {
-        if (!cancelled) setPermisos(set);
-      })
-      .catch(() => {
-        // Sin permisos conocidos no se muestran opciones restringidas.
-        if (!cancelled) setPermisos(new Set());
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { loaded, can, hasRole } = usePermissions();
 
   const goTo = (path: string) => {
     onClose();
@@ -102,10 +91,13 @@ function AdministrationSidebar({
   };
 
   const visibleItems = (items: NavItem[]) =>
-    permisos === null
+    !loaded
       ? []
       : items.filter(
-          (item) => !item.permission || permisos.has(item.permission),
+          (item) =>
+            (!item.permission || can(item.permission)) &&
+            (!item.allowedRoles ||
+              item.allowedRoles.some((role) => hasRole(role))),
         );
 
   return (
