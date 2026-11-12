@@ -17,6 +17,7 @@ import {
   getCategories,
   updateCategory,
 } from "../services/categoriesApi";
+import usePermissions from "../../auth/hooks/usePermissions";
 
 const EMPTY_FORM: CategoryForm = {
   nombre: "",
@@ -24,6 +25,7 @@ const EMPTY_FORM: CategoryForm = {
 };
 
 function CategoriesPage() {
+  const { can } = usePermissions();
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -229,13 +231,13 @@ function CategoriesPage() {
               </p>
             </div>
 
-            <button
+            {can("PRODUCTOS_CREAR") && <button
               type="button"
               onClick={openCreate}
               className="theme-button-dark rounded-xl px-5 py-3 text-sm font-semibold"
             >
               + Nueva categoría
-            </button>
+            </button>}
           </div>
 
           {error && (
@@ -348,15 +350,15 @@ function CategoriesPage() {
 
                         <td className="px-5 py-4">
                           <div className="flex justify-end gap-2">
-                            <button
+                            {can("PRODUCTOS_EDITAR") && <button
                               type="button"
                               onClick={() => openEdit(category)}
                               className="rounded-lg border theme-border px-3 py-2 text-xs font-semibold theme-text"
                             >
                               Editar
-                            </button>
+                            </button>}
 
-                            <button
+                            {can("PRODUCTOS_EDITAR") && <button
                               type="button"
                               onClick={() => void toggleStatus(category)}
                               className="rounded-lg border theme-border px-3 py-2 text-xs font-semibold theme-text"
@@ -364,7 +366,7 @@ function CategoriesPage() {
                               {category.estado === "ACTIVO"
                                 ? "Desactivar"
                                 : "Activar"}
-                            </button>
+                            </button>}
                           </div>
                         </td>
                       </tr>

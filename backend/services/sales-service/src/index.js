@@ -4,6 +4,7 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 const registrarRutasVentas = require('./ventas.routes');
+const { registerReportRoutes } = require('./reportes.routes');
 
 const app = express();
 
@@ -125,6 +126,12 @@ app.use(async (req, res, next) => {
   const method = req.method.toUpperCase();
   const path = req.path;
   let permission = null;
+  let allowedRoles;
+
+  if (method === 'GET' && /^\/reportes\/(diario|mensual|ventas|ingresos)\/?$/.test(path)) {
+    permission = 'VENTAS_LEER';
+    allowedRoles = ['ADMIN', 'SUPERVISOR'];
+  }
 
   // Seguimiento de una anulación persistente.
   if (
@@ -214,7 +221,7 @@ app.use(async (req, res, next) => {
 
   // No interceptar rutas ajenas a ventas, clientes y pagos.
   if (!permission) {
-    const esRutaComercial = /^\/(ventas|clientes|pagos)(?:\/|$)/.test(path);
+    const esRutaComercial = /^\/(ventas|clientes|pagos|reportes)(?:\/|$)/.test(path);
 
     if (!esRutaComercial) {
       return next();
@@ -256,7 +263,10 @@ app.use(async (req, res, next) => {
           Authorization: authorization,
           'x-internal-service-key': internalSecret,
         },
-        body: JSON.stringify({ permission }),
+        body: JSON.stringify({
+          permission,
+          ...(allowedRoles ? { allowed_roles: allowedRoles } : {}),
+        }),
         signal: AbortSignal.timeout(5000),
       },
     );
@@ -287,6 +297,8 @@ app.use(async (req, res, next) => {
     });
   }
 });
+
+registerReportRoutes(app, prisma);
 
 app.get('/ventas', async (req, res) => {
   try {

@@ -4,6 +4,7 @@ import AdministrationSidebar from "../../administration/components/Administratio
 import LogoutButton from "../../auth/components/LogoutButton";
 import { getProducts } from "../../products/services/productsApi";
 import type { Product, ProductVariant } from "../../products/types/products.types";
+import usePermissions from "../../auth/hooks/usePermissions";
 
 type Provider = {
   id: string;
@@ -89,6 +90,7 @@ const buttonClass =
   "rounded-xl border theme-border px-4 py-2.5 text-sm font-medium hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function PurchasesPage() {
+  const { can } = usePermissions();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -320,7 +322,13 @@ export default function PurchasesPage() {
               Al registrar la compra, el backend incrementa el stock y registra los movimientos de entrada.
             </p>
 
-            <form onSubmit={registerPurchase} className="mt-5 space-y-6">
+            {!can("INVENTARIO_EDITAR") && (
+            <p className="mt-5 rounded-xl bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text-soft">
+              Tu cuenta puede consultar las compras, pero no registrarlas.
+            </p>
+          )}
+          <form onSubmit={registerPurchase} className="mt-5 space-y-6">
+          <fieldset disabled={!can("INVENTARIO_EDITAR")} className="contents">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="purchase-provider" className="mb-2 block text-sm font-medium">
@@ -506,7 +514,8 @@ export default function PurchasesPage() {
               {providers.length === 0 && !loading && (
                 <p className="text-sm theme-text-muted">Crea un proveedor antes de registrar la compra.</p>
               )}
-            </form>
+            </fieldset>
+</form>
           </section>
 
           <section className="rounded-2xl border theme-border p-4 sm:p-6">

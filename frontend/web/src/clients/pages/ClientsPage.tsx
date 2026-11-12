@@ -24,6 +24,7 @@ import {
   validateClientForm,
   type ClientFormErrors,
 } from "../utils/clientsValidation";
+import usePermissions from "../../auth/hooks/usePermissions";
 
 function sanitizeClientName(value: string): string {
   return value
@@ -38,6 +39,7 @@ const EMPTY_FORM: ClientForm = {
 };
 
 function ClientsPage() {
+  const { can } = usePermissions();
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -297,13 +299,13 @@ function ClientsPage() {
               </p>
             </div>
 
-            <button
+            {can("CLIENTES_CREAR") && <button
               type="button"
               onClick={openCreate}
               className="theme-button-dark rounded-xl px-5 py-3 text-sm font-semibold"
             >
               + Nuevo cliente
-            </button>
+            </button>}
           </div>
 
           {error && (
@@ -451,7 +453,7 @@ function ClientsPage() {
 
                         <td className="px-5 py-4">
                           <div className="flex flex-wrap gap-2">
-                            <button
+                            {can("CLIENTES_EDITAR") && <button
                               type="button"
                               onClick={() =>
                                 openEdit(client)
@@ -459,9 +461,9 @@ function ClientsPage() {
                               className="rounded-lg border theme-border px-3 py-1.5 text-xs font-semibold theme-text"
                             >
                               Editar
-                            </button>
+                            </button>}
 
-                            <button
+                            {can("CLIENTES_CAMBIAR_ESTADO") && <button
                               type="button"
                               onClick={() =>
                                 void toggleStatus(
@@ -479,7 +481,7 @@ function ClientsPage() {
                               "ACTIVO"
                                 ? "Desactivar"
                                 : "Activar"}
-                            </button>
+                            </button>}
                           </div>
                         </td>
                       </tr>

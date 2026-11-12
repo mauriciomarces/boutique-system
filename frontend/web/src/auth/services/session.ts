@@ -14,6 +14,10 @@ export function getRefreshToken() {
   return localStorage.getItem(REFRESH_KEY);
 }
 
+export function notifyAuthSessionChanged() {
+  window.dispatchEvent(new Event("sposabella:auth-session-changed"));
+}
+
 export function getTokenExpiration(token: string): number | null {
   try {
     const payload = token.split(".")[1];
@@ -34,6 +38,7 @@ export function clearAuthSession() {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
+  notifyAuthSessionChanged();
 }
 
 export async function renewSession(): Promise<string> {
@@ -47,6 +52,7 @@ export async function renewSession(): Promise<string> {
     if (!response.access_token) throw new Error("El servidor no devolvió el token.");
 
     localStorage.setItem(ACCESS_KEY, response.access_token);
+    notifyAuthSessionChanged();
     return response.access_token;
   })();
 

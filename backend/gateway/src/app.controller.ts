@@ -12,10 +12,11 @@ import {
   Post,
   Put,
   Query,
+  Req,
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
 import { AppService } from './app.service';
 import { MicroservicesService } from './microservices.service';
@@ -110,42 +111,47 @@ export class AppController {
   // =========================================================
 
   @Post('api/users/auth/register')
-  register(@Body() body: unknown) {
+  register(@Body() body: unknown, @Req() request: Request) {
     return this.microservicesService.post(
       'http://users-service:4002/auth/register',
       body,
+      this.getRateLimitForwardingHeaders(request),
     );
   }
 
   @Post('api/users/auth/verify-email')
-  verifyEmail(@Body() body: unknown) {
+  verifyEmail(@Body() body: unknown, @Req() request: Request) {
     return this.microservicesService.post(
       'http://users-service:4002/auth/verify-email',
       body,
+      this.getRateLimitForwardingHeaders(request),
     );
   }
 
   @Post('api/users/auth/resend-verification')
-  resendVerification(@Body() body: unknown) {
+  resendVerification(@Body() body: unknown, @Req() request: Request) {
     return this.microservicesService.post(
       'http://users-service:4002/auth/resend-verification',
       body,
+      this.getRateLimitForwardingHeaders(request),
     );
   }
 
   @Post('api/users/auth/login')
-  login(@Body() body: unknown) {
+  login(@Body() body: unknown, @Req() request: Request) {
     return this.microservicesService.post(
       'http://users-service:4002/auth/login',
       body,
+      this.getRateLimitForwardingHeaders(request),
     );
   }
 
   @Post('api/users/auth/refresh')
-  refresh(@Body() body: unknown) {
+  refresh(@Body() body: unknown, @Req() request: Request) {
     return this.microservicesService.post(
       'http://users-service:4002/auth/refresh',
       body,
+      this.getRateLimitForwardingHeaders(request),
     );
   }
 
@@ -170,26 +176,29 @@ export class AppController {
   }
 
   @Post('api/users/auth/forgot-password')
-  forgotPassword(@Body() body: unknown) {
+  forgotPassword(@Body() body: unknown, @Req() request: Request) {
     return this.microservicesService.post(
       'http://users-service:4002/auth/forgot-password',
       body,
+      this.getRateLimitForwardingHeaders(request),
     );
   }
 
   @Post('api/users/auth/reset-password')
-  resetPassword(@Body() body: unknown) {
+  resetPassword(@Body() body: unknown, @Req() request: Request) {
     return this.microservicesService.post(
       'http://users-service:4002/auth/reset-password',
       body,
+      this.getRateLimitForwardingHeaders(request),
     );
   }
 
   @Post('api/users/auth/activate-account')
-  activateAccount(@Body() body: unknown) {
+  activateAccount(@Body() body: unknown, @Req() request: Request) {
     return this.microservicesService.post(
       'http://users-service:4002/auth/activate-account',
       body,
+      this.getRateLimitForwardingHeaders(request),
     );
   }
 
@@ -445,6 +454,65 @@ export class AppController {
   getVentas(@Headers('authorization') authorization?: string) {
     return this.microservicesService.get(
       'http://sales-service:4005/ventas',
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/reportes/diario')
+  async getReporteDiario(
+    @Query('fecha') fecha: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const params = new URLSearchParams({ fecha });
+    await this.requireReportPermission(authorization);
+    return this.microservicesService.get(
+      `http://sales-service:4005/reportes/diario?${params.toString()}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/reportes/mensual')
+  async getReporteMensual(
+    @Query('mes') mes: string,
+    @Query('anio') anio: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const params = new URLSearchParams({ mes, anio });
+    await this.requireReportPermission(authorization);
+    return this.microservicesService.get(
+      `http://sales-service:4005/reportes/mensual?${params.toString()}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/reportes/ventas')
+  async getReporteVentas(
+    @Query('desde') desde: string,
+    @Query('hasta') hasta: string,
+    @Query('estado') estado: string | undefined,
+    @Query('cliente_id') clienteId: string | undefined,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const params = new URLSearchParams({ desde, hasta });
+    await this.requireReportPermission(authorization);
+    if (estado) params.set('estado', estado);
+    if (clienteId) params.set('cliente_id', clienteId);
+    return this.microservicesService.get(
+      `http://sales-service:4005/reportes/ventas?${params.toString()}`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Get('api/reportes/ingresos')
+  async getReporteIngresos(
+    @Query('desde') desde: string,
+    @Query('hasta') hasta: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    const params = new URLSearchParams({ desde, hasta });
+    await this.requireReportPermission(authorization);
+    return this.microservicesService.get(
+      `http://sales-service:4005/reportes/ingresos?${params.toString()}`,
       this.getForwardedHeaders(authorization),
     );
   }
@@ -950,6 +1018,29 @@ export class AppController {
     );
   }
 
+  @Get('api/roles/:id/permisos/recomendados')
+  getRecommendedRolePermissions(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.get(
+      `http://users-service:4002/roles/${id}/permisos/recomendados`,
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
+  @Post('api/roles/:id/permisos/plantilla')
+  applyRolePermissionTemplate(
+    @Param('id') id: string,
+    @Headers('authorization') authorization?: string,
+  ) {
+    return this.microservicesService.post(
+      `http://users-service:4002/roles/${id}/permisos/plantilla`,
+      {},
+      this.getForwardedHeaders(authorization),
+    );
+  }
+
   @Get('api/usuarios/:id/roles')
   getUserRoles(
     @Param('id') id: string,
@@ -1204,6 +1295,18 @@ export class AppController {
     };
   }
 
+  private getRateLimitForwardingHeaders(
+    request: Request,
+  ): Record<string, string> {
+    const secret = process.env.INTERNAL_SERVICE_SECRET;
+    if (!secret || !request.ip) return {};
+
+    return {
+      'x-client-ip': request.ip,
+      'x-internal-service-key': secret,
+    };
+  }
+
   private async requireAnalysisPermission(authorization?: string): Promise<void> {
     if (!authorization) {
       throw new UnauthorizedException('Se requiere una sesión autenticada.');
@@ -1216,14 +1319,14 @@ export class AppController {
     let status: number;
     try {
       const response = await fetch('http://users-service:4002/internal/auth/validate', {
-        method: 'POST',
-        headers: {
+          method: 'POST',
+          headers: {
           'Content-Type': 'application/json',
-          Authorization: authorization,
-          'x-internal-service-key': secret,
-        },
+            Authorization: authorization,
+            'x-internal-service-key': secret,
+          },
         body: JSON.stringify({ permission: 'USUARIOS_LEER' }),
-        signal: AbortSignal.timeout(3000),
+          signal: AbortSignal.timeout(3000),
       });
       status = response.status;
     } catch {
@@ -1237,6 +1340,57 @@ export class AppController {
     }
     if (status < 200 || status >= 300) {
       throw new BadGatewayException('No se pudo validar el permiso de análisis.');
+    }
+  }
+
+  private async requireReportPermission(authorization?: string): Promise<void> {
+    if (!authorization) {
+      throw new UnauthorizedException('Se requiere una sesión autenticada.');
+    }
+
+    const secret = process.env.INTERNAL_SERVICE_SECRET;
+    if (!secret) {
+      throw new BadGatewayException(
+        'La autorización del servicio de usuarios no está configurada.',
+      );
+    }
+
+    let response: globalThis.Response;
+    try {
+      response = await fetch(
+        'http://users-service:4002/internal/auth/validate',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authorization,
+            'x-internal-service-key': secret,
+          },
+          body: JSON.stringify({
+            permission: 'VENTAS_LEER',
+            allowed_roles: ['ADMIN', 'SUPERVISOR'],
+          }),
+          signal: AbortSignal.timeout(3000),
+        },
+      );
+    } catch {
+      throw new BadGatewayException(
+        'No se pudo validar el permiso de reportes.',
+      );
+    }
+
+    if (response.status === 401) {
+      throw new UnauthorizedException('La sesión no es válida.');
+    }
+    if (response.status === 403) {
+      throw new ForbiddenException(
+        'Solo ADMIN y SUPERVISOR pueden consultar reportes.',
+      );
+    }
+    if (!response.ok) {
+      throw new BadGatewayException(
+        'No se pudo validar el permiso de reportes.',
+      );
     }
   }
 }

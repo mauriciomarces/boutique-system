@@ -9,6 +9,14 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { publishSystemEvent } = require('../../../contracts/event-publisher');
 const { verifiedActorId } = require('../../../contracts/event-actor');
+const { getClientIpRateLimitKey } = require('./rate-limit');
+const {
+  guardarPlantillaPermisos,
+  obtenerPermisosEfectivos,
+  obtenerPermisosRecomendados,
+  tieneRolAdminActivo,
+  usuarioTieneRolPermitido,
+} = require('./permisos');
 
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
@@ -37,6 +45,8 @@ app.use(cors({
 const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
+  keyGenerator: (req) =>
+    getClientIpRateLimitKey(req, process.env.INTERNAL_SERVICE_SECRET),
   standardHeaders: 'draft-8',
   legacyHeaders: false,
 });
@@ -44,6 +54,8 @@ const authRateLimit = rateLimit({
 const loginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
+  keyGenerator: (req) =>
+    getClientIpRateLimitKey(req, process.env.INTERNAL_SERVICE_SECRET),
   standardHeaders: 'draft-8',
   legacyHeaders: false,
 });
@@ -51,6 +63,8 @@ const loginRateLimit = rateLimit({
 const recoveryRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,
+  keyGenerator: (req) =>
+    getClientIpRateLimitKey(req, process.env.INTERNAL_SERVICE_SECRET),
   standardHeaders: 'draft-8',
   legacyHeaders: false,
 });
@@ -111,7 +125,7 @@ function serializeBigInt(value) {
 
 function buildUserPayload(usuario) {
   const roles = (usuario.usuario_rol || [])
-    .filter(({ roles }) => roles?.estado === 'ACTIVO')
+    .filter(({ roles }) => String(roles?.estado).toUpperCase() === 'ACTIVO')
     .map(({ roles }) => ({
       id: roles.id,
       nombre: roles.nombre,
@@ -537,18 +551,14 @@ function authorizePermission(permissionName) {
         });
       }
 
-      const tienePermiso = usuario.usuario_rol.some(
-        ({ roles }) => {
-          if (roles.estado !== 'ACTIVO') {
-            return false;
-          }
-
-          return roles.rol_permiso.some(
-            ({ permisos }) =>
-              permisos.nombre === permissionName
-          );
-        }
+      const permisosDisponibles = tieneRolAdminActivo(usuario)
+        ? await prisma.permisos.findMany({ select: { nombre: true } })
+        : [];
+      const permisosEfectivos = obtenerPermisosEfectivos(
+        usuario,
+        permisosDisponibles,
       );
+      const tienePermiso = permisosEfectivos.includes(permissionName);
 
       if (!tienePermiso) {
         return res.status(403).json({
@@ -576,23 +586,25 @@ function authorizePermission(permissionName) {
 }
 
 function isAdminRole(role) {
-  return role?.nombre === 'ADMIN';
+  return String(role?.nombre).toUpperCase() === 'ADMIN';
 }
 
 async function countActiveAdministrators() {
-  return prisma.usuarios.count({
-    where: {
-      estado: 'ACTIVO',
+  const usuarios = await prisma.usuarios.findMany({
+    select: {
+      estado: true,
       usuario_rol: {
-        some: {
-          roles: {
-            nombre: 'ADMIN',
-            estado: 'ACTIVO',
-          },
+        select: {
+          roles: { select: { nombre: true, estado: true } },
         },
       },
     },
   });
+  return usuarios.filter(
+    (usuario) =>
+      String(usuario.estado).toUpperCase() === 'ACTIVO' &&
+      tieneRolAdminActivo(usuario),
+  ).length;
 }
 
 async function userHasActiveAdminRole(usuarioId) {
@@ -614,12 +626,8 @@ async function userHasActiveAdminRole(usuarioId) {
   });
 
   return (
-    usuario?.estado === 'ACTIVO' &&
-    usuario.usuario_rol.some(
-      ({ roles }) =>
-        roles?.nombre === 'ADMIN' &&
-        roles.estado === 'ACTIVO',
-    )
+    String(usuario?.estado).toUpperCase() === 'ACTIVO' &&
+    tieneRolAdminActivo(usuario)
   );
 }
 
@@ -1230,6 +1238,95 @@ app.get('/roles/:id/permisos', authenticateToken, authorizePermission('ROLES_LEE
   }
 });
 
+app.get(
+  '/roles/:id/permisos/recomendados',
+  authenticateToken,
+  authorizePermission('ROLES_LEER'),
+  async (req, res) => {
+    try {
+      const rol = await prisma.roles.findUnique({
+        where: { id: BigInt(req.params.id) },
+        select: { id: true, nombre: true },
+      });
+
+      if (!rol) {
+        return res.status(404).json({ error: 'Rol no encontrado' });
+      }
+
+      if (isAdminRole(rol)) {
+        return res.status(403).json({
+          error: 'El rol ADMIN está protegido y no admite cambios de permisos',
+        });
+      }
+
+      const catalogo = await prisma.permisos.findMany({
+        select: { id: true, nombre: true, descripcion: true },
+        orderBy: { id: 'asc' },
+      });
+      const nombresRecomendados = obtenerPermisosRecomendados(
+        rol.nombre,
+        catalogo,
+      );
+
+      if (!nombresRecomendados) {
+        return res.status(400).json({
+          error: 'No existe una plantilla recomendada para este rol',
+        });
+      }
+
+      const recomendados = catalogo.filter((permiso) =>
+        nombresRecomendados.includes(permiso.nombre),
+      );
+      return res.json(serializeBigInt(recomendados));
+    } catch (error) {
+      console.error('Error al consultar permisos recomendados:', error);
+      return res.status(400).json({
+        error: 'No se pudieron consultar los permisos recomendados',
+      });
+    }
+  },
+);
+
+app.post(
+  '/roles/:id/permisos/plantilla',
+  authenticateToken,
+  authorizePermission('ROLES_ASIGNAR_PERMISOS'),
+  async (req, res) => {
+    try {
+      const rolId = BigInt(req.params.id);
+      const rol = await prisma.roles.findUnique({
+        where: { id: rolId },
+        select: { id: true, nombre: true },
+      });
+      if (!rol) {
+        return res.status(404).json({ error: 'Rol no encontrado' });
+      }
+
+      const catalogo = await prisma.permisos.findMany({
+        select: { id: true, nombre: true },
+      });
+      const asignados = await guardarPlantillaPermisos(
+        prisma,
+        rolId,
+        rol.nombre,
+        catalogo,
+      );
+      if (!asignados) {
+        return res.status(400).json({
+          error: 'No existe una plantilla recomendada para este rol',
+        });
+      }
+
+      return res.json(serializeBigInt(asignados));
+    } catch (error) {
+      console.error('Error al aplicar plantilla de permisos:', error);
+      return res.status(400).json({
+        error: 'No se pudo aplicar la plantilla recomendada',
+      });
+    }
+  },
+);
+
 app.post('/roles/:id/permisos', authenticateToken, authorizePermission('ROLES_ASIGNAR_PERMISOS'), async (req, res) => {
   try {
     const { permiso_id } = req.body;
@@ -1241,9 +1338,23 @@ app.post('/roles/:id/permisos', authenticateToken, authorizePermission('ROLES_AS
     const permisoId = BigInt(permiso_id);
 
     const rol = await prisma.roles.findUnique({ where: { id: rolId } });
-    const permiso = await prisma.permisos.findUnique({ where: { id: permisoId } });
-    if (!rol || !permiso) {
-      return res.status(404).json({ error: 'Rol o permiso no encontrado' });
+
+    if (!rol) {
+      return res.status(404).json({ error: 'Rol no encontrado' });
+    }
+
+    if (isAdminRole(rol)) {
+      return res.status(403).json({
+        error: 'El rol ADMIN está protegido y no admite cambios de permisos',
+      });
+    }
+
+    const permiso = await prisma.permisos.findUnique({
+      where: { id: permisoId },
+    });
+
+    if (!permiso) {
+      return res.status(404).json({ error: 'Permiso no encontrado' });
     }
 
     const existente = await prisma.rol_permiso.findUnique({
@@ -1268,6 +1379,25 @@ app.delete('/roles/:id/permisos/:permisoId', authenticateToken, authorizePermiss
   try {
     const rolId = BigInt(req.params.id);
     const permisoId = BigInt(req.params.permisoId);
+
+    const rol = await prisma.roles.findUnique({
+      where: { id: rolId },
+    });
+
+    if (!rol) {
+      return res.status(404).json({ error: 'Rol no encontrado' });
+    }
+    if (isAdminRole(rol)) {
+      return res.status(403).json({
+        error: 'El rol ADMIN está protegido y no admite cambios de permisos',
+      });
+    }
+
+    if (isAdminRole(rol)) {
+      return res.status(403).json({
+        error: 'El rol ADMIN está protegido y no admite cambios de permisos',
+      });
+    }
 
     const relacion = await prisma.rol_permiso.findUnique({
       where: {
@@ -1732,26 +1862,11 @@ app.patch(
       }
 
       const esAdministradorActivo =
-        usuarioObjetivo?.estado === 'ACTIVO' &&
-        usuarioObjetivo.usuario_rol.some(
-          ({ roles }) =>
-            roles?.nombre === 'ADMIN' && roles.estado === 'ACTIVO'
-        );
+        String(usuarioObjetivo?.estado).toUpperCase() === 'ACTIVO' &&
+        tieneRolAdminActivo(usuarioObjetivo);
 
       if (esAdministradorActivo) {
-        const administradoresActivos = await prisma.usuarios.count({
-          where: {
-            estado: 'ACTIVO',
-            usuario_rol: {
-              some: {
-                roles: {
-                  nombre: 'ADMIN',
-                  estado: 'ACTIVO',
-                },
-              },
-            },
-          },
-        });
+        const administradoresActivos = await countActiveAdministrators();
 
         if (administradoresActivos <= 1) {
           return res.status(409).json({
@@ -3029,6 +3144,11 @@ app.get(
                     nombre: true,
                     descripcion: true,
                     estado: true,
+                    rol_permiso: {
+                      select: {
+                        permisos: { select: { nombre: true } },
+                      },
+                    },
                   },
                 },
               },
@@ -3048,7 +3168,14 @@ app.get(
         });
       }
 
-      res.json(buildUserPayload(usuario));
+      const permisosDisponibles = tieneRolAdminActivo(usuario)
+        ? await prisma.permisos.findMany({ select: { nombre: true } })
+        : [];
+
+      res.json({
+        ...buildUserPayload(usuario),
+        permisos: obtenerPermisosEfectivos(usuario, permisosDisponibles),
+      });
     } catch (error) {
       console.error(
         'Error al consultar usuario autenticado:',
@@ -3119,6 +3246,17 @@ async function bootstrap() {
         error: 'Debe especificarse el permiso requerido',
       });
     }
+    const requiredRoles = req.body?.allowed_roles;
+    if (
+      requiredRoles !== undefined &&
+      (!Array.isArray(requiredRoles) ||
+        requiredRoles.length === 0 ||
+        requiredRoles.some((role) => typeof role !== 'string' || !role.trim()))
+    ) {
+      return res.status(400).json({
+        error: 'La lista de roles permitidos no es válida',
+      });
+    }
 
     try {
       const usuario = await prisma.usuarios.findUnique({
@@ -3130,6 +3268,7 @@ async function bootstrap() {
             select: {
               roles: {
                 select: {
+                  nombre: true,
                   estado: true,
                   rol_permiso: {
                     select: {
@@ -3151,10 +3290,23 @@ async function bootstrap() {
         return res.status(403).json({ error: 'El usuario se encuentra inactivo' });
       }
 
-      const tienePermiso = usuario.usuario_rol.some(({ roles }) =>
-        roles.estado === 'ACTIVO' &&
-        roles.rol_permiso.some(({ permisos }) => permisos.nombre === permission)
-      );
+      const permisosDisponibles = tieneRolAdminActivo(usuario)
+        ? await prisma.permisos.findMany({ select: { nombre: true } })
+        : [];
+      const tienePermiso = obtenerPermisosEfectivos(
+        usuario,
+        permisosDisponibles,
+      ).includes(permission);
+
+      const tieneRolPermitido =
+        requiredRoles === undefined ||
+        usuarioTieneRolPermitido(usuario, requiredRoles);
+
+      if (!tieneRolPermitido) {
+        return res.status(403).json({
+          error: 'El rol activo no está autorizado para esta operación',
+        });
+      }
 
       if (!tienePermiso) {
         return res.status(403).json({

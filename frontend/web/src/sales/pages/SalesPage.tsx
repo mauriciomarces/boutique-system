@@ -40,6 +40,7 @@ import type {
   Sale,
   SaleCreateDetail,
 } from "../types/sales.types";
+import usePermissions from "../../auth/hooks/usePermissions";
 
 
 interface CartItem extends SaleCreateDetail {
@@ -90,6 +91,7 @@ function getStatusClass(status: string) {
 }
 
 function SalesPage() {
+  const { can } = usePermissions();
   const [sales, setSales] = useState<Sale[]>([]);
   const [cancellationOperations, setCancellationOperations] =
     useState<Record<string, CancellationOperation>>({});
@@ -721,13 +723,13 @@ function SalesPage() {
               </p>
             </div>
 
-            <button
+            {can("VENTAS_CREAR") && <button
               type="button"
               onClick={openCreate}
               className="theme-button-dark rounded-xl px-5 py-3 text-sm font-semibold"
             >
               + Nueva venta
-            </button>
+            </button>}
           </div>
 
           {error && (
@@ -923,7 +925,7 @@ function SalesPage() {
                                 {sale.estado === "ANULADA" &&
                                   cancellationOperations[sale.id] &&
                                   cancellationOperations[sale.id].estado !== "COMPLETADA" && (
-                                    <button
+                                    can("VENTAS_EDITAR") && <button
                                       type="button"
                                       onClick={() => void handleRetryCancellation(sale)}
                                       disabled={saving}
@@ -941,7 +943,7 @@ function SalesPage() {
                                         payment.estado === "PENDIENTE"
                                       )
                                       .reduce((sum, payment) => sum + Number(payment.monto), 0) > 0 && (
-                                    <button
+                                    can("VENTAS_CREAR") && <button
                                       type="button"
                                       onClick={() => openPayment(sale)}
                                       className="rounded-lg border border-[#6cad91] px-3 py-1.5 text-xs font-semibold text-[#47745f]"
@@ -955,7 +957,7 @@ function SalesPage() {
                                     payment.estado === "PAGADO" ||
                                     payment.estado === "PENDIENTE"
                                   ) && (
-                                    <button
+                                    can("VENTAS_EDITAR") && <button
                                       type="button"
                                       onClick={() => void handleCancelSale(sale)}
                                       disabled={saving}

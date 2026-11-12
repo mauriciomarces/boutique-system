@@ -6,6 +6,7 @@ import AuthInput from "../components/AuthInput";
 import AuthLayout from "../components/AuthLayout";
 import AuthMessage from "../components/AuthMessage";
 import { login } from "../services/authApi";
+import { notifyAuthSessionChanged } from "../services/session";
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -53,12 +54,13 @@ function LoginPage() {
         "sposabella_user",
         JSON.stringify(response.user),
       );
+      notifyAuthSessionChanged();
 
       const hasAdminRole = response.user.roles?.some(
-        (role) => role.nombre === "ADMIN",
+        (role) => role.nombre.toUpperCase() === "ADMIN",
       );
 
-      navigate(hasAdminRole ? "/administracion/usuarios" : "/cuenta");
+      navigate(hasAdminRole ? "/administracion/usuarios" : "/panel");
     } catch (err) {
       setError(
         err instanceof Error
@@ -72,7 +74,7 @@ function LoginPage() {
 
   return (
     <AuthLayout
-      title="Bienvenido de nuevo"
+      title="Iniciar sesión"
       subtitle="Ingresa a tu cuenta para continuar."
       footer={
         <p className="text-sm theme-text-soft">
@@ -153,4 +155,3 @@ function LoginPage() {
 }
 
 export default LoginPage;
-

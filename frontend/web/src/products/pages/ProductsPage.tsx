@@ -27,6 +27,7 @@ import {
   updateProduct,
 } from "../services/productsApi";
 import { ensureInventoryForVariant } from "../../inventory/services/inventoryApi";
+import usePermissions from "../../auth/hooks/usePermissions";
 
 const EMPTY_FORM: ProductForm = {
   categoria_id: "",
@@ -76,6 +77,7 @@ function productFormFrom(product: Product): ProductForm {
 }
 
 function ProductsPage() {
+  const { can } = usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
@@ -578,14 +580,14 @@ function ProductsPage() {
               </p>
             </div>
 
-            <button
+            {can("PRODUCTOS_CREAR") && <button
               type="button"
               onClick={openCreate}
               disabled={categories.length === 0}
               className="theme-button-dark rounded-xl px-5 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Nuevo producto
-            </button>
+            </button>}
           </div>
 
           {categories.length === 0 && !loading && (
@@ -718,7 +720,7 @@ function ProductsPage() {
 
                         <td className="px-5 py-4">
                           <div className="flex justify-end gap-2">
-                            <button
+                            {can("PRODUCTOS_EDITAR") && <button
                               type="button"
                               onClick={() => void openEdit(product)}
                               disabled={loadingProductId === product.id}
@@ -727,9 +729,9 @@ function ProductsPage() {
                               {loadingProductId === product.id
                                 ? "Cargando..."
                                 : "Editar"}
-                            </button>
+                            </button>}
 
-                            <button
+                            {can("PRODUCTOS_EDITAR") && <button
                               type="button"
                               onClick={() => void toggleStatus(product)}
                               className="rounded-lg border theme-border px-3 py-2 text-xs font-semibold theme-text"
@@ -737,7 +739,7 @@ function ProductsPage() {
                               {product.estado === "ACTIVO"
                                 ? "Desactivar"
                                 : "Activar"}
-                            </button>
+                            </button>}
                           </div>
                         </td>
                       </tr>
@@ -1006,7 +1008,7 @@ function ProductsPage() {
                               Esta variante permanece inactiva y no se reactivará al guardar.
                             </p>
                           ) : (
-                            <button
+                            can("PRODUCTOS_EDITAR") && <button
                               type="button"
                               disabled={!variantsEditable || saving}
                               onClick={() =>

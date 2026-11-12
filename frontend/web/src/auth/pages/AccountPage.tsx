@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { clearAuthSession } from "../services/session";
+import {
+  clearAuthSession,
+  notifyAuthSessionChanged,
+  renewSession,
+} from "../services/session";
 import LogoutButton from "../components/LogoutButton";
 
-import {
-  getCurrentUser,
-  refreshAccessToken,
-} from "../services/authApi";
+import { getCurrentUser } from "../services/authApi";
 import type { AuthUser } from "../types/auth.types";
 
 function AccountPage() {
@@ -19,10 +20,6 @@ function AccountPage() {
     const loadUser = async () => {
       const accessToken = localStorage.getItem(
         "sposabella_access_token",
-      );
-
-      const refreshToken = localStorage.getItem(
-        "sposabella_refresh_token",
       );
 
       if (!accessToken) {
@@ -39,24 +36,13 @@ function AccountPage() {
           "sposabella_user",
           JSON.stringify(currentUser),
         );
+        notifyAuthSessionChanged();
       } catch {
-        if (!refreshToken) {
-          clearAuthSession();
-          navigate("/login", { replace: true });
-          return;
-        }
-
         try {
-          const response =
-            await refreshAccessToken(refreshToken);
-
-          localStorage.setItem(
-            "sposabella_access_token",
-            response.access_token,
-          );
+          const renewedAccessToken = await renewSession();
 
           const currentUser = await getCurrentUser(
-            response.access_token,
+            renewedAccessToken,
           );
 
           setUser(currentUser);
@@ -65,6 +51,7 @@ function AccountPage() {
             "sposabella_user",
             JSON.stringify(currentUser),
           );
+          notifyAuthSessionChanged();
         } catch {
           clearAuthSession();
           navigate("/login", { replace: true });
