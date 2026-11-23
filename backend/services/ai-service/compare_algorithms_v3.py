@@ -133,12 +133,32 @@ class ExperimentalTree:
             return node
 
         if self.criterion == "gain_ratio":
-            average_gain = np.mean([c["gain"] for c in candidates])
+            best_by_feature = {}
+
+            for candidate in candidates:
+                feature = candidate["feature"]
+                current = best_by_feature.get(feature)
+
+                if current is None or (
+                    candidate["gain"], candidate["ratio"]
+                ) > (
+                    current["gain"], current["ratio"]
+                ):
+                    best_by_feature[feature] = candidate
+
+            average_gain = np.mean([
+                candidate["gain"]
+                for candidate in best_by_feature.values()
+            ])
+
             eligible = [
-                c for c in candidates
-                if c["gain"] >= average_gain and c["gain"] > 0
+                candidate
+                for candidate in best_by_feature.values()
+                if candidate["gain"] >= average_gain
+                and candidate["gain"] > 0
             ]
-            pool = eligible if eligible else candidates
+
+            pool = eligible if eligible else list(best_by_feature.values())
             best = max(pool, key=lambda c: (c["ratio"], c["gain"]))
         else:
             best = max(candidates, key=lambda c: c["gain"])
