@@ -92,6 +92,52 @@ test("POST /events valida y almacena", async (t) => {
   assert.equal(result.data.ingest_status, "created");
 });
 
+
+test("POST /events acepta y almacena eventos de compras", async (t) => {
+  reset({ clearPersistence: true });
+  const { server, port } = await listen();
+  t.after(() => server.close());
+
+  const purchaseEvents = [
+    {
+      event_id: "evt-compra-registrada-001",
+      service: "inventory-service",
+      usuario_id: 10,
+      tipo_evento: "COMPRA_REGISTRADA",
+      entidad: "compra",
+      entidad_id: 501,
+      timestamp: "2026-11-12T10:00:00Z",
+      resultado: "EXITOSO",
+      metadata: {},
+    },
+    {
+      event_id: "evt-compra-anulada-001",
+      service: "inventory-service",
+      usuario_id: 10,
+      tipo_evento: "COMPRA_ANULADA",
+      entidad: "compra",
+      entidad_id: 502,
+      timestamp: "2026-11-12T10:05:00Z",
+      resultado: "EXITOSO",
+      metadata: {},
+    },
+  ];
+
+  for (const event of purchaseEvents) {
+    const result = await request(port, "POST", "/events", event);
+    assert.equal(result.status, 201);
+    assert.equal(result.data.event_id, event.event_id);
+    assert.equal(result.data.ingest_status, "created");
+  }
+
+  const storedEvents = store.listEvents();
+  assert.equal(storedEvents.length, 2);
+  assert.deepEqual(
+    storedEvents.map((event) => event.tipo_evento).sort(),
+    ["COMPRA_ANULADA", "COMPRA_REGISTRADA"],
+  );
+});
+
 test("POST /events rechaza un evento inválido", async (t) => {
   reset({ clearPersistence: true });
   const { server, port } = await listen();

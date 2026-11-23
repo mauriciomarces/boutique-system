@@ -1307,43 +1307,8 @@ export class AppController {
     };
   }
 
+
   private async requireAnalysisPermission(authorization?: string): Promise<void> {
-    if (!authorization) {
-      throw new UnauthorizedException('Se requiere una sesión autenticada.');
-    }
-    const secret = process.env.INTERNAL_SERVICE_SECRET;
-    if (!secret) {
-      throw new BadGatewayException('La autorización del servicio de usuarios no está configurada.');
-    }
-
-    let status: number;
-    try {
-      const response = await fetch('http://users-service:4002/internal/auth/validate', {
-          method: 'POST',
-          headers: {
-          'Content-Type': 'application/json',
-            Authorization: authorization,
-            'x-internal-service-key': secret,
-          },
-        body: JSON.stringify({ permission: 'USUARIOS_LEER' }),
-          signal: AbortSignal.timeout(3000),
-      });
-      status = response.status;
-    } catch {
-      throw new BadGatewayException('No se pudo validar el permiso de análisis.');
-    }
-    if (status === 401) {
-      throw new UnauthorizedException('La sesión no es válida.');
-    }
-    if (status === 403) {
-      throw new ForbiddenException('No tiene permiso para consultar análisis.');
-    }
-    if (status < 200 || status >= 300) {
-      throw new BadGatewayException('No se pudo validar el permiso de análisis.');
-    }
-  }
-
-  private async requireReportPermission(authorization?: string): Promise<void> {
     if (!authorization) {
       throw new UnauthorizedException('Se requiere una sesión autenticada.');
     }
@@ -1356,6 +1321,71 @@ export class AppController {
     }
 
     let response: globalThis.Response;
+
+    try {
+      response = await fetch(
+        'http://users-service:4002/internal/auth/validate',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authorization,
+            'x-internal-service-key': secret,
+          },
+          body: JSON.stringify({ permission: 'USUARIOS_LEER' }),
+          signal: AbortSignal.timeout(3000),
+        },
+      );
+    } catch {
+      throw new BadGatewayException(
+        'No se pudo validar el permiso de análisis.',
+      );
+    }
+
+    if (response.status === 401) {
+      throw new UnauthorizedException('La sesión no es válida.');
+    }
+
+    if (response.status === 403) {
+      throw new ForbiddenException(
+        'No tiene permiso para consultar análisis.',
+      );
+    }
+
+    if (!response.ok) {
+      throw new BadGatewayException(
+        'No se pudo validar el permiso de análisis.',
+      );
+    }
+
+    const result = await response.json().catch(() => null);
+
+    if (
+      result?.valid !== true ||
+      typeof result?.user?.id !== 'string' ||
+      !/^[1-9]\d*$/.test(result.user.id)
+    ) {
+      throw new BadGatewayException(
+        'La respuesta de autorización de análisis no es válida.',
+      );
+    }
+  }
+
+  private async requireReportPermission(authorization?: string): Promise<void> {
+    if (!authorization) {
+      throw new UnauthorizedException('Se requiere una sesión autenticada.');
+    }
+
+    const secret = process.env.INTERNAL_SERVICE_SECRET;
+
+    if (!secret) {
+      throw new BadGatewayException(
+        'La autorización del servicio de usuarios no está configurada.',
+      );
+    }
+
+    let response: globalThis.Response;
+
     try {
       response = await fetch(
         'http://users-service:4002/internal/auth/validate',
@@ -1382,14 +1412,28 @@ export class AppController {
     if (response.status === 401) {
       throw new UnauthorizedException('La sesión no es válida.');
     }
+
     if (response.status === 403) {
       throw new ForbiddenException(
         'Solo ADMIN y SUPERVISOR pueden consultar reportes.',
       );
     }
+
     if (!response.ok) {
       throw new BadGatewayException(
         'No se pudo validar el permiso de reportes.',
+      );
+    }
+
+    const result = await response.json().catch(() => null);
+
+    if (
+      result?.valid !== true ||
+      typeof result?.user?.id !== 'string' ||
+      !/^[1-9]\d*$/.test(result.user.id)
+    ) {
+      throw new BadGatewayException(
+        'La respuesta de autorización de reportes no es válida.',
       );
     }
   }

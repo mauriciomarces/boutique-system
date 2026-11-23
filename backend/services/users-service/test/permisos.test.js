@@ -4,6 +4,7 @@ const {
   guardarPlantillaPermisos,
   obtenerPermisosEfectivos,
   obtenerPermisosRecomendados,
+  usuarioTieneRolActivo,
   usuarioTieneRolPermitido,
 } = require('../src/permisos');
 
@@ -190,4 +191,41 @@ test('solo acepta roles activos incluidos explícitamente en la lista permitida'
   assert.equal(usuarioTieneRolPermitido(usuario, ['SUPERVISOR', 'ADMIN']), true);
   assert.equal(usuarioTieneRolPermitido(usuario, ['ADMIN']), false);
   assert.equal(usuarioTieneRolPermitido(usuario, []), false);
+});
+
+test('identifica usuarios con al menos un rol activo', () => {
+  assert.equal(
+    usuarioTieneRolActivo({
+      usuario_rol: [
+        { roles: { nombre: 'VENDEDOR', estado: 'ACTIVO' } },
+      ],
+    }),
+    true,
+  );
+
+  assert.equal(
+    usuarioTieneRolActivo({
+      usuario_rol: [
+        { roles: { nombre: 'ADMIN', estado: 'INACTIVO' } },
+        { roles: { nombre: 'VENDEDOR', estado: 'ACTIVO' } },
+      ],
+    }),
+    true,
+  );
+});
+
+test('rechaza usuarios sin roles activos', () => {
+  assert.equal(usuarioTieneRolActivo({ usuario_rol: [] }), false);
+
+  assert.equal(
+    usuarioTieneRolActivo({
+      usuario_rol: [
+        { roles: { nombre: 'ADMIN', estado: 'INACTIVO' } },
+      ],
+    }),
+    false,
+  );
+
+  assert.equal(usuarioTieneRolActivo({}), false);
+  assert.equal(usuarioTieneRolActivo(undefined), false);
 });

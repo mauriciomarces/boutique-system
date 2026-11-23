@@ -1427,6 +1427,19 @@ app.post('/compras', async (req, res) => {
       });
     });
 
+    publishSystemEvent({
+      event_id: `inventory-purchase-${resultado.id}`,
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'COMPRA_REGISTRADA',
+      entidad: 'compra',
+      entidad_id: resultado.id.toString(),
+      metadata: {
+        proveedor_id: resultado.proveedor_id.toString(),
+        total: Number(resultado.total),
+        cantidad_detalles: resultado.detalle_compras.length,
+      },
+    });
+
     return res.status(201).json(serializar(resultado));
   } catch (error) {
     console.error('Error al registrar compra:', error);
@@ -1519,6 +1532,19 @@ app.patch('/compras/:id/anular', async (req, res) => {
           detalle_compras: true,
         },
       });
+    });
+
+    publishSystemEvent({
+      event_id: `inventory-purchase-cancel-${resultado.id}`,
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'COMPRA_ANULADA',
+      entidad: 'compra',
+      entidad_id: resultado.id.toString(),
+      metadata: {
+        proveedor_id: resultado.proveedor_id.toString(),
+        total: Number(resultado.total),
+        cantidad_detalles: resultado.detalle_compras.length,
+      },
     });
 
     return res.json(serializar(resultado));
