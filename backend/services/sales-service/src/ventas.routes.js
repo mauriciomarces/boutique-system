@@ -1,6 +1,7 @@
 const INVENTORY_SERVICE_URL =
   process.env.INVENTORY_SERVICE_URL || 'http://inventory-service:4004';
 const { publishSystemEvent } = require('../../../contracts/event-publisher');
+const { SALE_CLIENT_SELECT } = require('./client-data');
 const INVENTORY_REQUEST_TIMEOUT_MS = Math.max(
   1,
   Number.parseInt(process.env.INVENTORY_REQUEST_TIMEOUT_MS, 10) || 15000,
@@ -171,7 +172,7 @@ module.exports = function registrarRutasVentas(app, prisma) {
       const venta = await prisma.ventas.findUnique({
         where: { id },
         include: {
-          clientes: true,
+          clientes: { select: SALE_CLIENT_SELECT },
           detalle_ventas: true,
           pagos: true,
         },
@@ -354,7 +355,7 @@ module.exports = function registrarRutasVentas(app, prisma) {
           },
         },
         include: {
-          clientes: true,
+          clientes: { select: SALE_CLIENT_SELECT },
           detalle_ventas: true,
           pagos: true,
         },
@@ -537,7 +538,7 @@ module.exports = function registrarRutasVentas(app, prisma) {
           estado: 'CONFIRMADA',
         },
         include: {
-          clientes: true,
+          clientes: { select: SALE_CLIENT_SELECT },
           detalle_ventas: true,
           pagos: true,
         },
@@ -612,7 +613,7 @@ module.exports = function registrarRutasVentas(app, prisma) {
           id: ventaConfirmada.id,
         },
         include: {
-          clientes: true,
+          clientes: { select: SALE_CLIENT_SELECT },
           detalle_ventas: true,
           pagos: true,
         },
@@ -1255,7 +1256,7 @@ module.exports = function registrarRutasVentas(app, prisma) {
 
       const venta = await prisma.ventas.findUnique({
         where: { id },
-        include: { clientes: true, detalle_ventas: true, pagos: true },
+        include: { clientes: { select: SALE_CLIENT_SELECT }, detalle_ventas: true, pagos: true },
       });
 
       if (!venta) {
@@ -1310,7 +1311,7 @@ module.exports = function registrarRutasVentas(app, prisma) {
         }
         const actual = await prisma.ventas.findUnique({
           where: { id },
-          include: { clientes: true, detalle_ventas: true, pagos: true },
+          include: { clientes: { select: SALE_CLIENT_SELECT }, detalle_ventas: true, pagos: true },
         });
 
         const salida = JSON.parse(JSON.stringify({
@@ -1360,7 +1361,7 @@ module.exports = function registrarRutasVentas(app, prisma) {
         return tx.ventas.update({
           where: { id },
           data: { estado, actualizado_en: new Date() },
-          include: { clientes: true, detalle_ventas: true, pagos: true },
+          include: { clientes: { select: SALE_CLIENT_SELECT }, detalle_ventas: true, pagos: true },
         });
       });
 

@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
 
 import AnalysisLayout from "../components/AnalysisLayout";
 import {
@@ -15,6 +18,7 @@ import type {
   ModelMetadata,
   TrainingSummary,
 } from "../types/training.types";
+import { matchesLocalDateRange } from "../../utils/dateFilters";
 
 function formatPct(value?: number) {
   if (
@@ -97,6 +101,10 @@ function TrainingDashboardPage() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyStatus, setHistoryStatus] = useState("");
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
   const [experimental, setExperimental] =
     useState<V3EvaluationReport | null>(null);
   const [experimentalError, setExperimentalError] =
@@ -224,6 +232,24 @@ function TrainingDashboardPage() {
         })),
     [trainings],
   );
+  const visibleTrainings = useMemo(() => {
+    const term = historySearch.trim().toLocaleLowerCase("es");
+    return trainings.filter((item) => {
+      const searchable = [
+        item.training_id,
+        item.model_version,
+        item.dataset_version,
+        item.algoritmo,
+        item.estado,
+      ].join(" ").toLocaleLowerCase("es");
+      return (
+        (!term || searchable.includes(term)) &&
+        (!historyStatus || item.estado === historyStatus) &&
+        matchesLocalDateRange(item.fecha, historyFrom, historyTo)
+      );
+    });
+  }, [trainings, historySearch, historyStatus, historyFrom, historyTo]);
+  const trainingPagination = usePagination(visibleTrainings);
 
   return (
     <AnalysisLayout
@@ -550,6 +576,63 @@ function TrainingDashboardPage() {
               </div>
             </div>
 
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <input
+                type="search"
+                value={historySearch}
+                onChange={(event) => {
+                  setHistorySearch(event.target.value);
+                  trainingPagination.setPage(1);
+                }}
+                placeholder="Buscar versión, dataset o algoritmo"
+                aria-label="Buscar entrenamientos"
+                className="w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2 text-sm theme-text"
+              />
+              <select
+                value={historyStatus}
+                onChange={(event) => {
+                  setHistoryStatus(event.target.value);
+                  trainingPagination.setPage(1);
+                }}
+                aria-label="Filtrar entrenamientos por estado"
+                className="rounded-xl border theme-border bg-[var(--bg)] px-3 py-2 text-sm theme-text"
+              >
+                <option value="">Todos los estados</option>
+                {[...new Set(trainings.map((item) => item.estado))]
+                  .sort()
+                  .map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+              </select>
+              <label className="text-sm theme-text">
+                Desde
+                <input
+                  type="date"
+                  value={historyFrom}
+                  onChange={(event) => {
+                    setHistoryFrom(event.target.value);
+                    trainingPagination.setPage(1);
+                  }}
+                  className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2"
+                />
+              </label>
+              <label className="text-sm theme-text">
+                Hasta
+                <input
+                  type="date"
+                  value={historyTo}
+                  onChange={(event) => {
+                    setHistoryTo(event.target.value);
+                    trainingPagination.setPage(1);
+                  }}
+                  className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2"
+                />
+              </label>
+            </div>
+            <p className="mb-3 text-sm theme-text-muted">
+              {visibleTrainings.length} de {trainings.length} entrenamientos
+            </p>
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left text-sm">
                 <thead>
@@ -585,7 +668,7 @@ function TrainingDashboardPage() {
                 </thead>
 
                 <tbody>
-                  {trainings.map((item) => (
+                  {trainingPagination.pageItems.map((item) => (
                     <tr
                       key={item.training_id}
                       className="border-t theme-border"
@@ -633,6 +716,14 @@ function TrainingDashboardPage() {
                 </tbody>
               </table>
             </div>
+            <PaginationControls
+              page={trainingPagination.page}
+              pageCount={trainingPagination.pageCount}
+              pageSize={trainingPagination.pageSize}
+              total={trainingPagination.total}
+              onPageChange={trainingPagination.setPage}
+              onPageSizeChange={trainingPagination.setPageSize}
+            />
           </div>
         </>
       )}

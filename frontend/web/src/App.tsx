@@ -162,7 +162,7 @@ function App() {
         />
         <Route
           path="/administracion"
-          element={<RequireAuth><RequirePermission permission="USUARIOS_LEER"><AdminUsersPage /></RequirePermission></RequireAuth>}
+          element={<RequireAuth><PanelPage /></RequireAuth>}
         />
         <Route
           path="/administracion/usuarios"

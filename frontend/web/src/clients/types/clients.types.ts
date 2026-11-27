@@ -1,7 +1,8 @@
 ﻿export interface Client {
   id: string;
   nombre: string;
-  apellido: string;
+  apellido_paterno: string;
+  apellido_materno: string | null;
   telefono: string | null;
   correo: string | null;
   estado: "ACTIVO" | "INACTIVO";
@@ -11,7 +12,8 @@
 
 export interface ClientForm {
   nombre: string;
-  apellido: string;
+  apellido_paterno: string;
+  apellido_materno: string;
   telefono: string;
   correo: string;
 }

@@ -83,8 +83,9 @@ export async function getInventory(
   return unwrapList<InventoryItem>(data);
 }
 
-export async function getInventoryMovements(): Promise<InventoryMovement[]> {
-  const data = await request<unknown>(`${API_BASE_URL}/movimientos`);
+export async function getInventoryMovements(limit?: number): Promise<InventoryMovement[]> {
+  const query = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
+  const data = await request<unknown>(`${API_BASE_URL}/movimientos${query}`);
 
   return unwrapList<InventoryMovement>(data);
 }

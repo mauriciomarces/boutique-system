@@ -6,6 +6,7 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 const { publishSystemEvent } = require('../../../contracts/event-publisher');
 const { verifiedActorId } = require('../../../contracts/event-actor');
+const { parseMovementLimit } = require('./pagination');
 
 const app = express();
 const port = Number(process.env.PORT || 4004);
@@ -848,6 +849,7 @@ app.get('/movimientos', async (req, res) => {
     const { variante_producto_id, tipo_movimiento } = req.query;
 
     const where = {};
+    const take = parseMovementLimit(req.query.limit);
 
     if (variante_producto_id) {
       where.variante_producto_id = parseId(
@@ -865,6 +867,7 @@ app.get('/movimientos', async (req, res) => {
       orderBy: {
         id: 'desc',
       },
+      ...(take ? { take } : {}),
     });
 
     return res.json(serializar(movimientos));
@@ -1427,6 +1430,19 @@ app.post('/compras', async (req, res) => {
       });
     });
 
+    publishSystemEvent({
+      event_id: `inventory-purchase-${resultado.id}`,
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'COMPRA_REGISTRADA',
+      entidad: 'compra',
+      entidad_id: resultado.id.toString(),
+      metadata: {
+        proveedor_id: resultado.proveedor_id.toString(),
+        total: Number(resultado.total),
+        cantidad_detalles: resultado.detalle_compras.length,
+      },
+    });
+
     return res.status(201).json(serializar(resultado));
   } catch (error) {
     console.error('Error al registrar compra:', error);
@@ -1519,6 +1535,19 @@ app.patch('/compras/:id/anular', async (req, res) => {
           detalle_compras: true,
         },
       });
+    });
+
+    publishSystemEvent({
+      event_id: `inventory-purchase-cancel-${resultado.id}`,
+      usuario_id: verifiedActorId(req),
+      tipo_evento: 'COMPRA_ANULADA',
+      entidad: 'compra',
+      entidad_id: resultado.id.toString(),
+      metadata: {
+        proveedor_id: resultado.proveedor_id.toString(),
+        total: Number(resultado.total),
+        cantidad_detalles: resultado.detalle_compras.length,
+      },
     });
 
     return res.json(serializar(resultado));

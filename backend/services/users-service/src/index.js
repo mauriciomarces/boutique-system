@@ -9,12 +9,17 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { publishSystemEvent } = require('../../../contracts/event-publisher');
 const { verifiedActorId } = require('../../../contracts/event-actor');
+const {
+  normalizePersonName,
+  normalizeOptionalPersonName,
+} = require('./person-names');
 const { getClientIpRateLimitKey } = require('./rate-limit');
 const {
   guardarPlantillaPermisos,
   obtenerPermisosEfectivos,
   obtenerPermisosRecomendados,
   tieneRolAdminActivo,
+  usuarioTieneRolActivo,
   usuarioTieneRolPermitido,
 } = require('./permisos');
 
@@ -136,7 +141,8 @@ function buildUserPayload(usuario) {
   return serializeBigInt({
     id: usuario.id,
     nombre: usuario.nombre,
-    apellido: usuario.apellido,
+    apellido_paterno: usuario.apellido_paterno,
+    apellido_materno: usuario.apellido_materno ?? null,
     correo: usuario.correo,
     telefono: usuario.telefono,
     estado: usuario.estado,
@@ -242,33 +248,19 @@ async function ensureAdminUser(adminRole) {
 
   const now = new Date();
   const hashContrasena = await bcrypt.hash(adminPassword, 12);
+  const apellidoPaterno =
+    process.env.ADMIN_PATERNAL_LAST_NAME ||
+    process.env.ADMIN_LAST_NAME ||
+    'SposaBella';
+  const apellidoMaterno = process.env.ADMIN_MATERNAL_LAST_NAME || null;
   const usuario = await prisma.usuarios.upsert({
     where: { correo: adminEmail },
-    update: {
-      nombre: process.env.ADMIN_NAME || 'Administrador',
-      apellido: process.env.ADMIN_LAST_NAME || 'SposaBella',
-      estado: 'ACTIVO',
-      correo_verificado: true,
-      verificado_en: now,
-      credenciales: {
-        upsert: {
-          update: {
-            hash_contrasena: hashContrasena,
-            estado: 'ACTIVO',
-            actualizado_en: now,
-          },
-          create: {
-            hash_contrasena: hashContrasena,
-            estado: 'ACTIVO',
-            creado_en: now,
-            actualizado_en: now,
-          },
-        },
-      },
-    },
+    update: {},
     create: {
       nombre: process.env.ADMIN_NAME || 'Administrador',
-      apellido: process.env.ADMIN_LAST_NAME || 'SposaBella',
+      apellido_paterno: apellidoPaterno,
+      apellido_materno: apellidoMaterno,
+      apellido: [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' '),
       correo: adminEmail,
       estado: 'ACTIVO',
       correo_verificado: true,
@@ -352,16 +344,6 @@ function normalizeText(value) {
   const text = value.trim();
 
   return text.length > 0 ? text : null;
-}
-
-function normalizePersonName(value, fieldName) {
-  const text = normalizeText(value);
-
-  if (!text || !/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/.test(text)) {
-    throw new Error(`${fieldName} solo puede contener letras y espacios válidos`);
-  }
-
-  return text;
 }
 
 function normalizeAdminPhone(value) {
@@ -453,6 +435,67 @@ function generateAccessToken(usuario, roles) {
   );
 }
 
+async function obtenerContextoAutorizacion(usuarioId) {
+  const usuario = await prisma.usuarios.findUnique({
+    where: { id: BigInt(usuarioId) },
+    select: {
+      id: true,
+      estado: true,
+      correo: true,
+      usuario_rol: {
+        select: {
+          roles: {
+            select: {
+              id: true,
+              nombre: true,
+              estado: true,
+              rol_permiso: {
+                select: {
+                  permisos: {
+                    select: {
+                      id: true,
+                      nombre: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!usuario) {
+    return {
+      usuario: null,
+      tieneRolActivo: false,
+      permisosEfectivos: [],
+    };
+  }
+
+  const tieneRolActivo = usuarioTieneRolActivo(usuario);
+
+  const permisosDisponibles =
+    tieneRolActivo && tieneRolAdminActivo(usuario)
+      ? await prisma.permisos.findMany({
+          select: { nombre: true },
+        })
+      : [];
+
+  const permisosEfectivos = obtenerPermisosEfectivos(
+    usuario,
+    permisosDisponibles,
+  );
+
+  return {
+    usuario,
+    tieneRolActivo,
+    permisosEfectivos,
+  };
+}
+
+
 /**
  * Middleware para autenticar JWT.
  */
@@ -466,14 +509,32 @@ async function authenticateToken(req, res, next) {
   }
 
   const token = authorization.substring(7);
+  let payload;
 
   try {
-    const payload = jwt.verify(token, ACCESS_SECRET);
-
-    const usuario = await prisma.usuarios.findUnique({
-      where: { id: BigInt(payload.sub) },
-      select: { id: true, estado: true, correo: true },
+    payload = jwt.verify(token, ACCESS_SECRET, {
+      algorithms: ['HS256'],
     });
+  } catch {
+    return res.status(401).json({
+      error: 'Token inválido o expirado',
+    });
+  }
+
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    typeof payload.sub !== 'string' ||
+    !/^[1-9]\d*$/.test(payload.sub)
+  ) {
+    return res.status(401).json({
+      error: 'El token no contiene un identificador válido',
+    });
+  }
+
+  try {
+    const contexto = await obtenerContextoAutorizacion(payload.sub);
+    const { usuario, tieneRolActivo, permisosEfectivos } = contexto;
 
     if (!usuario) {
       return res.status(401).json({
@@ -481,21 +542,40 @@ async function authenticateToken(req, res, next) {
       });
     }
 
-    if (usuario.estado !== 'ACTIVO') {
+    if (String(usuario.estado).toUpperCase() !== 'ACTIVO') {
       return res.status(403).json({
         error: 'El usuario se encuentra inactivo',
       });
     }
 
+    if (!tieneRolActivo) {
+      return res.status(403).json({
+        error: 'El usuario no tiene un rol activo',
+      });
+    }
+
+    if (permisosEfectivos.length === 0) {
+      return res.status(403).json({
+        error: 'El usuario no tiene permisos efectivos',
+      });
+    }
+
     req.auth = payload;
-    req.authenticatedUser = { id: payload.sub };
-    next();
+    req.authenticatedUser = {
+      id: usuario.id.toString(),
+    };
+    req.authorizationContext = contexto;
+
+    return next();
   } catch (error) {
-    return res.status(401).json({
-      error: 'Token inválido o expirado',
+    console.error('Error al autenticar usuario:', error);
+
+    return res.status(500).json({
+      error: 'No se pudo verificar la autenticación',
     });
   }
 }
+
 
 function authorizePermission(permissionName) {
   return async (req, res, next) => {
@@ -506,38 +586,11 @@ function authorizePermission(permissionName) {
         });
       }
 
-      const usuarioId = BigInt(req.auth.sub);
+      const contexto =
+        req.authorizationContext ||
+        await obtenerContextoAutorizacion(req.auth.sub);
 
-      const usuario = await prisma.usuarios.findUnique({
-        where: {
-          id: usuarioId,
-        },
-        select: {
-          id: true,
-          estado: true,
-          usuario_rol: {
-            select: {
-              roles: {
-                select: {
-                  id: true,
-                  nombre: true,
-                  estado: true,
-                  rol_permiso: {
-                    select: {
-                      permisos: {
-                        select: {
-                          id: true,
-                          nombre: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
+      const { usuario, tieneRolActivo, permisosEfectivos } = contexto;
 
       if (!usuario) {
         return res.status(401).json({
@@ -545,38 +598,39 @@ function authorizePermission(permissionName) {
         });
       }
 
-      if (usuario.estado !== 'ACTIVO') {
+      if (String(usuario.estado).toUpperCase() !== 'ACTIVO') {
         return res.status(403).json({
           error: 'El usuario se encuentra inactivo',
         });
       }
 
-      const permisosDisponibles = tieneRolAdminActivo(usuario)
-        ? await prisma.permisos.findMany({ select: { nombre: true } })
-        : [];
-      const permisosEfectivos = obtenerPermisosEfectivos(
-        usuario,
-        permisosDisponibles,
-      );
-      const tienePermiso = permisosEfectivos.includes(permissionName);
+      if (!tieneRolActivo) {
+        return res.status(403).json({
+          error: 'El usuario no tiene un rol activo',
+        });
+      }
 
-      if (!tienePermiso) {
+      if (permisosEfectivos.length === 0) {
+        return res.status(403).json({
+          error: 'El usuario no tiene permisos efectivos',
+        });
+      }
+
+      if (!permisosEfectivos.includes(permissionName)) {
         return res.status(403).json({
           error: 'No tiene permisos para realizar esta operación',
           permiso_requerido: permissionName,
         });
       }
 
+      req.authorizationContext = contexto;
       req.authorization = {
         permission: permissionName,
       };
 
-      next();
+      return next();
     } catch (error) {
-      console.error(
-        'Error al verificar permisos:',
-        error
-      );
+      console.error('Error al verificar permisos:', error);
 
       return res.status(500).json({
         error: 'No se pudo verificar la autorización',
@@ -829,7 +883,8 @@ app.get(
       select: {
         id: true,
         nombre: true,
-        apellido: true,
+        apellido_paterno: true,
+        apellido_materno: true,
         correo: true,
         telefono: true,
         estado: true,
@@ -882,7 +937,8 @@ app.get(
       select: {
         id: true,
         nombre: true,
-        apellido: true,
+        apellido_paterno: true,
+        apellido_materno: true,
         correo: true,
         telefono: true,
         estado: true,
@@ -1634,9 +1690,17 @@ app.post(
   authorizePermission('USUARIOS_CREAR'),
   async (req, res) => {
   try {
-    const { nombre, apellido, correo, telefono, rol_id } = req.body;
+    const {
+      nombre,
+      apellido_paterno,
+      apellido_materno,
+      correo,
+      telefono,
+      rol_id,
+    } = req.body;
     const nombreNormalizado = normalizePersonName(nombre, 'El nombre');
-    const apellidoNormalizado = normalizePersonName(apellido, 'El apellido');
+    const apellidoPaterno = normalizePersonName(apellido_paterno, 'El apellido paterno');
+    const apellidoMaterno = normalizeOptionalPersonName(apellido_materno, 'El apellido materno');
     const correoNormalizado = normalizeEmail(correo);
     const telefonoNormalizado = normalizeAdminPhone(telefono);
 
@@ -1674,7 +1738,9 @@ app.post(
       const creado = await tx.usuarios.create({
         data: {
           nombre: nombreNormalizado,
-          apellido: apellidoNormalizado,
+          apellido_paterno: apellidoPaterno,
+          apellido_materno: apellidoMaterno,
+          apellido: [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' '),
           correo: correoNormalizado,
           telefono: telefonoNormalizado,
           estado: 'INACTIVO',
@@ -1686,7 +1752,8 @@ app.post(
         select: {
           id: true,
           nombre: true,
-          apellido: true,
+          apellido_paterno: true,
+          apellido_materno: true,
           correo: true,
           telefono: true,
           estado: true,
@@ -1751,13 +1818,15 @@ app.put(
 
     const {
       nombre,
-      apellido,
+      apellido_paterno,
+      apellido_materno,
       correo,
       telefono,
     } = req.body;
 
     const nombreNormalizado = normalizePersonName(nombre, 'El nombre');
-    const apellidoNormalizado = normalizePersonName(apellido, 'El apellido');
+    const apellidoPaterno = normalizePersonName(apellido_paterno, 'El apellido paterno');
+    const apellidoMaterno = normalizeOptionalPersonName(apellido_materno, 'El apellido materno');
     const correoNormalizado = normalizeEmail(correo);
     const telefonoNormalizado = normalizeAdminPhone(telefono);
 
@@ -1771,7 +1840,9 @@ app.put(
       },
       data: {
         nombre: nombreNormalizado,
-        apellido: apellidoNormalizado,
+        apellido_paterno: apellidoPaterno,
+        apellido_materno: apellidoMaterno,
+        apellido: [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' '),
         correo: correoNormalizado,
         telefono: telefonoNormalizado,
         actualizado_en: new Date(),
@@ -1779,7 +1850,8 @@ app.put(
       select: {
         id: true,
         nombre: true,
-        apellido: true,
+        apellido_paterno: true,
+        apellido_materno: true,
         correo: true,
         telefono: true,
         estado: true,
@@ -1887,7 +1959,8 @@ app.patch(
       select: {
         id: true,
         nombre: true,
-        apellido: true,
+        apellido_paterno: true,
+        apellido_materno: true,
         correo: true,
         telefono: true,
         estado: true,
@@ -2025,17 +2098,20 @@ app.post('/auth/register', authRateLimit, async (req, res) => {
   try {
     const {
       nombre,
-      apellido,
+      apellido_paterno,
+      apellido_materno,
       correo,
       telefono,
       contrasena,
     } = req.body;
 
     let nombreNormalizado;
-    let apellidoNormalizado;
+    let apellidoPaterno;
+    let apellidoMaterno;
     try {
       nombreNormalizado = normalizePersonName(nombre, 'El nombre');
-      apellidoNormalizado = normalizePersonName(apellido, 'El apellido');
+      apellidoPaterno = normalizePersonName(apellido_paterno, 'El apellido paterno');
+      apellidoMaterno = normalizeOptionalPersonName(apellido_materno, 'El apellido materno');
     } catch (error) {
       return res.status(400).json({ error: error.message });
     }
@@ -2053,9 +2129,9 @@ app.post('/auth/register', authRateLimit, async (req, res) => {
       });
     }
 
-    if (!apellidoNormalizado) {
+    if (!apellidoPaterno) {
       return res.status(400).json({
-        error: 'El apellido es obligatorio',
+        error: 'El apellido paterno es obligatorio',
       });
     }
 
@@ -2113,7 +2189,9 @@ app.post('/auth/register', authRateLimit, async (req, res) => {
           await tx.usuarios.create({
             data: {
               nombre: nombreNormalizado,
-              apellido: apellidoNormalizado,
+              apellido_paterno: apellidoPaterno,
+              apellido_materno: apellidoMaterno,
+              apellido: [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' '),
               correo: correoNormalizado,
               telefono: telefonoNormalizado,
               estado: 'ACTIVO',
@@ -2135,7 +2213,8 @@ app.post('/auth/register', authRateLimit, async (req, res) => {
             select: {
               id: true,
               nombre: true,
-              apellido: true,
+              apellido_paterno: true,
+              apellido_materno: true,
               correo: true,
               telefono: true,
               estado: true,
@@ -2896,14 +2975,74 @@ app.post('/auth/login', loginRateLimit, async (req, res) => {
       });
     }
 
-    const roles = usuario.usuario_rol
+
+    const contexto = await obtenerContextoAutorizacion(
+      usuario.id.toString()
+    );
+
+    if (!contexto.usuario) {
+      return res.status(401).json({
+        error: 'Usuario no encontrado',
+      });
+    }
+
+    if (String(contexto.usuario.estado).toUpperCase() !== 'ACTIVO') {
+      publishSystemEvent({
+        tipo_evento: 'LOGIN_FALLIDO',
+        entidad: 'auth_attempt',
+        resultado: 'FALLIDO',
+        ip: req.ip,
+        metadata: { motivo: 'cuenta_inactiva' },
+      });
+
+      return res.status(403).json({
+        error: 'El usuario se encuentra inactivo',
+      });
+    }
+
+    if (!contexto.tieneRolActivo) {
+      publishSystemEvent({
+        tipo_evento: 'LOGIN_FALLIDO',
+        entidad: 'auth_attempt',
+        resultado: 'FALLIDO',
+        ip: req.ip,
+        metadata: { motivo: 'sin_rol_activo' },
+      });
+
+      return res.status(403).json({
+        error: 'El usuario no tiene un rol activo',
+      });
+    }
+
+    if (contexto.permisosEfectivos.length === 0) {
+      publishSystemEvent({
+        tipo_evento: 'LOGIN_FALLIDO',
+        entidad: 'auth_attempt',
+        resultado: 'FALLIDO',
+        ip: req.ip,
+        metadata: { motivo: 'sin_permisos_efectivos' },
+      });
+
+      return res.status(403).json({
+        error: 'El usuario no tiene permisos efectivos',
+      });
+    }
+
+    const usuarioConRolesActuales = {
+      ...usuario,
+      usuario_rol: contexto.usuario.usuario_rol,
+    };
+
+    const roles = contexto.usuario.usuario_rol
       .filter(
-        ({ roles }) => roles.estado === 'ACTIVO'
+        ({ roles }) =>
+          roles &&
+          String(roles.estado).toUpperCase() === 'ACTIVO'
       )
       .map(({ roles }) => roles.nombre);
 
     const accessToken = generateAccessToken(
-      usuario,
+      usuarioConRolesActuales,
       roles
     );
 
@@ -2942,13 +3081,14 @@ app.post('/auth/login', loginRateLimit, async (req, res) => {
     const user = buildUserPayload({
       id: usuario.id,
       nombre: usuario.nombre,
-      apellido: usuario.apellido,
+      apellido_paterno: usuario.apellido_paterno,
+      apellido_materno: usuario.apellido_materno,
       correo: usuario.correo,
       telefono: usuario.telefono,
       estado: usuario.estado,
       correo_verificado: usuario.correo_verificado,
       verificado_en: usuario.verificado_en,
-      usuario_rol: usuario.usuario_rol,
+      usuario_rol: usuarioConRolesActuales.usuario_rol,
     });
 
     res.json({
@@ -3027,13 +3167,42 @@ app.post('/auth/refresh', authRateLimit, async (req, res) => {
       });
     }
 
-    const roles =
-      registro.usuarios.usuario_rol
-        .filter(
-          ({ roles }) =>
-            roles.estado === 'ACTIVO'
-        )
-        .map(({ roles }) => roles.nombre);
+
+    const contexto = await obtenerContextoAutorizacion(
+      registro.usuarios.id.toString()
+    );
+
+    if (!contexto.usuario) {
+      return res.status(401).json({
+        error: 'Usuario no encontrado',
+      });
+    }
+
+    if (String(contexto.usuario.estado).toUpperCase() !== 'ACTIVO') {
+      return res.status(403).json({
+        error: 'El usuario se encuentra inactivo',
+      });
+    }
+
+    if (!contexto.tieneRolActivo) {
+      return res.status(403).json({
+        error: 'El usuario no tiene un rol activo',
+      });
+    }
+
+    if (contexto.permisosEfectivos.length === 0) {
+      return res.status(403).json({
+        error: 'El usuario no tiene permisos efectivos',
+      });
+    }
+
+    const roles = contexto.usuario.usuario_rol
+      .filter(
+        ({ roles }) =>
+          roles &&
+          String(roles.estado).toUpperCase() === 'ACTIVO'
+      )
+      .map(({ roles }) => roles.nombre);
 
     const accessToken =
       generateAccessToken(
@@ -3130,7 +3299,8 @@ app.get(
           select: {
             id: true,
             nombre: true,
-            apellido: true,
+            apellido_paterno: true,
+            apellido_materno: true,
             correo: true,
             telefono: true,
             estado: true,
@@ -3259,44 +3429,32 @@ async function bootstrap() {
     }
 
     try {
-      const usuario = await prisma.usuarios.findUnique({
-        where: { id: BigInt(payload.sub) },
-        select: {
-          id: true,
-          estado: true,
-          usuario_rol: {
-            select: {
-              roles: {
-                select: {
-                  nombre: true,
-                  estado: true,
-                  rol_permiso: {
-                    select: {
-                      permisos: { select: { nombre: true } },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
+      const contexto = await obtenerContextoAutorizacion(payload.sub);
+      const { usuario, tieneRolActivo, permisosEfectivos } = contexto;
 
       if (!usuario) {
-        return res.status(401).json({ error: 'Usuario no encontrado' });
+        return res.status(401).json({
+          error: 'Usuario no encontrado',
+        });
       }
 
-      if (usuario.estado !== 'ACTIVO') {
-        return res.status(403).json({ error: 'El usuario se encuentra inactivo' });
+      if (String(usuario.estado).toUpperCase() !== 'ACTIVO') {
+        return res.status(403).json({
+          error: 'El usuario se encuentra inactivo',
+        });
       }
 
-      const permisosDisponibles = tieneRolAdminActivo(usuario)
-        ? await prisma.permisos.findMany({ select: { nombre: true } })
-        : [];
-      const tienePermiso = obtenerPermisosEfectivos(
-        usuario,
-        permisosDisponibles,
-      ).includes(permission);
+      if (!tieneRolActivo) {
+        return res.status(403).json({
+          error: 'El usuario no tiene un rol activo',
+        });
+      }
+
+      if (permisosEfectivos.length === 0) {
+        return res.status(403).json({
+          error: 'El usuario no tiene permisos efectivos',
+        });
+      }
 
       const tieneRolPermitido =
         requiredRoles === undefined ||
@@ -3308,7 +3466,7 @@ async function bootstrap() {
         });
       }
 
-      if (!tienePermiso) {
+      if (!permisosEfectivos.includes(permission)) {
         return res.status(403).json({
           error: 'No tiene permisos para realizar esta operación',
           permiso_requerido: permission,
@@ -3317,15 +3475,19 @@ async function bootstrap() {
 
       return res.status(200).json({
         valid: true,
-        user: { id: usuario.id.toString() },
+        user: {
+          id: usuario.id.toString(),
+        },
         permission,
       });
     } catch (error) {
       console.error('Error en la validación interna:', error);
+
       return res.status(500).json({
         error: 'No se pudo verificar la autorización',
       });
     }
+
   });
   app.listen(port, () => {
     console.log(

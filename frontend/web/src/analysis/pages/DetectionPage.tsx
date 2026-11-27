@@ -1,5 +1,8 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AnalysisLayout from "../components/AnalysisLayout";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
 import {
   classifyEvents,
   listAnalyses,
@@ -11,17 +14,60 @@ import {
 
 const initialFilters: EventFilters = {};
 
-function toIso(value: string) {
-  return value ? new Date(value).toISOString() : "";
+function toIso(value: string, endOfDay = false) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-").map(Number);
+  const date = endOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day);
+  return date.toISOString();
 }
 
 function formatName(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const readable = featureDescriptions[value] ??
+    value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return readable.charAt(0).toUpperCase() + readable.slice(1);
 }
 
-function formatValue(value: unknown): string {
+const featureDescriptions: Record<string, string> = {
+  failed_login_count: "intentos de inicio de sesión fallidos",
+  successful_login_count: "inicios de sesión correctos",
+  failed_login_ratio: "proporción de inicios de sesión fallidos",
+  sales_count_5m: "ventas en los últimos cinco minutos",
+  sales_count: "ventas en la ventana analizada",
+  sales_without_stock_link_count: "ventas sin una salida de stock asociada",
+  cancelled_sales_count: "ventas anuladas",
+  cancellation_ratio: "proporción de ventas anuladas",
+  stock_change_count: "cambios de inventario",
+  price_change_count: "cambios de precio",
+  admin_action_count: "acciones administrativas",
+  role_change_count: "cambios de rol",
+  user_change_count: "cambios de cuenta de usuario",
+  sales_after_stock_change: "ventas asociadas a movimientos de stock",
+  sales_after_price_change: "ventas posteriores a cambios de precio",
+  time_since_last_login: "tiempo desde el último inicio de sesión",
+  time_since_last_stock_change: "tiempo desde el último cambio de inventario",
+  time_since_last_price_change: "tiempo desde el último cambio de precio",
+  unique_entities_modified: "entidades distintas modificadas",
+};
+
+const timeSinceFeatures = new Set([
+  "time_since_last_login",
+  "time_since_last_stock_change",
+  "time_since_last_price_change",
+]);
+
+function formatValue(value: unknown, key?: string): string {
   if (value === null || value === undefined) return "Sin datos";
   if (typeof value === "boolean") return value ? "Sí" : "No";
+  if (typeof value === "number" && key && timeSinceFeatures.has(key)) {
+    if (value >= 9999) return "No hay un evento previo en los datos analizados";
+    const minutes = Math.max(0, Math.round(value));
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes ? `${hours} h ${remainingMinutes} min` : `${hours} h`;
+  }
   if (typeof value === "number") return Number(value.toFixed(3)).toString();
   if (typeof value === "string") return value;
   return JSON.stringify(value, null, 2);
@@ -40,7 +86,7 @@ function StructuredData({ title, data }: { title: string; data: Record<string, u
           <div key={key} className="rounded-lg border theme-border p-3">
             <p className="text-xs font-semibold theme-text-muted">{formatName(key)}</p>
             <pre className="mt-1 whitespace-pre-wrap break-words text-xs theme-text-soft">
-              {formatValue(value)}
+              {formatValue(value, key)}
             </pre>
           </div>
         ))}
@@ -89,7 +135,7 @@ function DetectionPage() {
   function applyFilters() {
     try {
       const from = toIso(fromInput);
-      const to = toIso(toInput);
+      const to = toIso(toInput, true);
 
       if (from && to && new Date(from) > new Date(to)) {
         setError("La fecha inicial no puede ser posterior a la fecha final.");
@@ -172,6 +218,13 @@ function DetectionPage() {
     if (b === "anonymous") return 1;
     return Number(a) - Number(b);
   });
+  const sortedEvents = useMemo(
+    () => [...events].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    ),
+    [events],
+  );
+  const eventPagination = usePagination(sortedEvents, 25);
 
   const isAnomalous = analysis?.classification.clasificacion === "ANOMALO";
 
@@ -183,6 +236,7 @@ function DetectionPage() {
     : [];
 
   const featureEntries = analysis ? Object.entries(analysis.correlation.features) : [];
+  const treePath = analysis?.classification.recorrido_arbol;
   const maxFeatureValue = Math.max(
     1,
     ...featureEntries.map(([, value]) => Math.abs(Number(value) || 0)),
@@ -389,9 +443,7 @@ function DetectionPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...events].sort(
-                    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-                  ).map((event) => (
+                  {eventPagination.pageItems.map((event) => (
                     <tr key={event.event_id} className="border-b theme-border theme-text">
                       <td className="whitespace-nowrap p-2">{new Date(event.timestamp).toLocaleString()}</td>
                       <td className="p-2">{event.service}</td>
@@ -404,6 +456,16 @@ function DetectionPage() {
                 </tbody>
               </table>
             </div>
+          )}
+          {events.length > 0 && (
+            <PaginationControls
+              page={eventPagination.page}
+              pageCount={eventPagination.pageCount}
+              pageSize={eventPagination.pageSize}
+              total={eventPagination.total}
+              onPageChange={eventPagination.setPage}
+              onPageSizeChange={eventPagination.setPageSize}
+            />
           )}
         </section>
 
@@ -581,7 +643,17 @@ function DetectionPage() {
               </p>
 
               <ol className="mt-3 space-y-2">
-                {analysis.classification.camino_arbol.length === 0 ? (
+                {treePath?.pasos.length ? (
+                  treePath.pasos.map((step) => (
+                    <li key={`${step.numero}-${step.variable}`} className="rounded-lg border theme-border p-3 text-sm theme-text-soft">
+                      <span className="mr-2 font-semibold theme-text">{step.numero}.</span>
+                      El modelo evaluó <strong>{featureDescriptions[step.variable] ?? formatName(step.variable)}</strong>:
+                      el valor fue {formatValue(step.valor)} y la condición del árbol fue
+                      {" "}{step.condicion}. La condición {step.condicion_satisfecha ? "se cumplió" : "no se cumplió"},
+                      por eso el recorrido siguió la rama {step.rama}.
+                    </li>
+                  ))
+                ) : analysis.classification.camino_arbol.length === 0 ? (
                   <li className="text-sm theme-text-soft">El modelo no devolvió condiciones del camino de decisión.</li>
                 ) : (
                   analysis.classification.camino_arbol.map((condition, index) => (
@@ -592,6 +664,14 @@ function DetectionPage() {
                   ))
                 )}
               </ol>
+
+              {treePath?.hoja && (
+                <p className="mt-4 rounded-lg border theme-border p-3 text-sm theme-text-soft">
+                  El recorrido llegó a una hoja que clasifica el caso como
+                  {" "}<strong>{treePath.hoja.clasificacion}</strong>.
+                  {" "}En el entrenamiento, esa hoja contenía {treePath.hoja.muestras_entrenamiento} registros.
+                </p>
+              )}
 
               {analysis.classification.factores.length > 0 && (
                 <div className="mt-5">

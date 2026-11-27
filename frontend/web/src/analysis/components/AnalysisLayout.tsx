@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import AdministrationLayout from "../../administration/components/AdministrationLayout";
 import LogoutButton from "../../auth/components/LogoutButton";
 
 interface AnalysisLayoutProps {
@@ -18,7 +18,10 @@ function AnalysisLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="theme-bg min-h-screen">
+    <AdministrationLayout
+      sidebarOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    >
       <header className="relative border-b theme-border bg-[var(--nav-bg)]">
         <div className="mx-auto flex h-[76px] max-w-[1500px] items-center justify-between px-6 lg:px-8">
           <Link
@@ -54,12 +57,7 @@ function AnalysisLayout({
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:px-8">
-        <AdministrationSidebar
-          sidebarOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-
+      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
         <main className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#5b9279]">
             Pipeline experimental
@@ -76,7 +74,7 @@ function AnalysisLayout({
           {children}
         </main>
       </div>
-    </div>
+    </AdministrationLayout>
   );
 }
 

@@ -92,6 +92,52 @@ test("POST /events valida y almacena", async (t) => {
   assert.equal(result.data.ingest_status, "created");
 });
 
+
+test("POST /events acepta y almacena eventos de compras", async (t) => {
+  reset({ clearPersistence: true });
+  const { server, port } = await listen();
+  t.after(() => server.close());
+
+  const purchaseEvents = [
+    {
+      event_id: "evt-compra-registrada-001",
+      service: "inventory-service",
+      usuario_id: 10,
+      tipo_evento: "COMPRA_REGISTRADA",
+      entidad: "compra",
+      entidad_id: 501,
+      timestamp: "2026-11-12T10:00:00Z",
+      resultado: "EXITOSO",
+      metadata: {},
+    },
+    {
+      event_id: "evt-compra-anulada-001",
+      service: "inventory-service",
+      usuario_id: 10,
+      tipo_evento: "COMPRA_ANULADA",
+      entidad: "compra",
+      entidad_id: 502,
+      timestamp: "2026-11-12T10:05:00Z",
+      resultado: "EXITOSO",
+      metadata: {},
+    },
+  ];
+
+  for (const event of purchaseEvents) {
+    const result = await request(port, "POST", "/events", event);
+    assert.equal(result.status, 201);
+    assert.equal(result.data.event_id, event.event_id);
+    assert.equal(result.data.ingest_status, "created");
+  }
+
+  const storedEvents = store.listEvents();
+  assert.equal(storedEvents.length, 2);
+  assert.deepEqual(
+    storedEvents.map((event) => event.tipo_evento).sort(),
+    ["COMPRA_ANULADA", "COMPRA_REGISTRADA"],
+  );
+});
+
 test("POST /events rechaza un evento inválido", async (t) => {
   reset({ clearPersistence: true });
   const { server, port } = await listen();
@@ -183,6 +229,22 @@ test("la clasificación se enlaza con eventos, características y se persiste", 
         input_id: JSON.parse(options.body).input_id,
         factores: [],
         camino_arbol: ["event_count_10m <= 2.5"],
+        recorrido_arbol: {
+          pasos: [{
+            numero: 1,
+            variable: "event_count_10m",
+            valor: 1,
+            umbral: 2.5,
+            condicion: "event_count_10m <= 2.500",
+            condicion_satisfecha: true,
+            rama: "izquierda",
+          }],
+          hoja: {
+            nodo: 1,
+            clasificacion: "NORMAL",
+            muestras_entrenamiento: 12,
+          },
+        },
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
     return originalFetch(url, options);
@@ -194,6 +256,8 @@ test("la clasificación se enlaza con eventos, características y se persiste", 
   assert.equal(result.data.event_ids[0], "evt-trace");
   assert.equal(result.data.classification.model_version, "v1");
   assert.equal(result.data.classification.input_id, result.data.analysis_id);
+  assert.equal(result.data.classification.recorrido_arbol.pasos[0].valor, 1);
+  assert.equal(result.data.classification.recorrido_arbol.pasos[0].valor, 1);
   assert.ok(result.data.correlation.features.event_count_10m);
   const history = await request(port, "GET", "/analyses");
   assert.equal(history.data.analyses[0].analysis_id, result.data.analysis_id);

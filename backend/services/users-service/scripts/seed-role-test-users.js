@@ -5,16 +5,46 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 
 const rolesToPrepare = [
-  { role: 'ADMIN', env: 'ROLE_TEST_ADMIN', name: 'Administrador' },
-  { role: 'SUPERVISOR', env: 'ROLE_TEST_SUPERVISOR', name: 'Supervisor' },
-  { role: 'VENDEDOR', env: 'ROLE_TEST_VENDEDOR', name: 'Vendedor' },
-  { role: 'INVENTARIO', env: 'ROLE_TEST_INVENTARIO', name: 'Inventario' },
-  { role: 'CONSULTA', env: 'ROLE_TEST_CONSULTA', name: 'Consulta' },
+  {
+    role: 'ADMIN',
+    env: 'ROLE_TEST_ADMIN',
+    name: 'Daniela',
+    apellidoPaterno: 'Rojas',
+    apellidoMaterno: 'Fernández',
+  },
+  {
+    role: 'SUPERVISOR',
+    env: 'ROLE_TEST_SUPERVISOR',
+    name: 'Gabriel',
+    apellidoPaterno: 'Vargas',
+    apellidoMaterno: 'Méndez',
+  },
+  {
+    role: 'VENDEDOR',
+    env: 'ROLE_TEST_VENDEDOR',
+    name: 'Natalia',
+    apellidoPaterno: 'Flores',
+    apellidoMaterno: 'Quiroga',
+  },
+  {
+    role: 'INVENTARIO',
+    env: 'ROLE_TEST_INVENTARIO',
+    name: 'Luis',
+    apellidoPaterno: 'Paredes',
+    apellidoMaterno: 'Ríos',
+  },
+  {
+    role: 'CONSULTA',
+    env: 'ROLE_TEST_CONSULTA',
+    name: 'Andrea',
+    apellidoPaterno: 'Morales',
+    apellidoMaterno: 'Castillo',
+  },
 ];
 
 function accountEmail(definition) {
   const configured = process.env[`${definition.env}_EMAIL`];
-  const email = (configured || `prueba.${definition.role.toLowerCase()}@sposabella.invalid`)
+  const email = (configured || `cuenta.${definition.role.toLowerCase()}@sposabella.invalid`)
     .trim()
     .toLowerCase();
   if (!/^[^\s@]+@sposabella\.invalid$/.test(email)) {
@@ -152,7 +182,9 @@ async function prepareRoleTestUsers(prisma) {
       await transaction.usuarios.create({
         data: {
           nombre: account.name,
-          apellido: 'Prueba',
+          apellido_paterno: account.apellidoPaterno,
+          apellido_materno: account.apellidoMaterno,
+          apellido: `${account.apellidoPaterno} ${account.apellidoMaterno}`,
           correo: account.email,
           estado: 'ACTIVO',
           creado_en: now,

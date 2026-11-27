@@ -43,6 +43,13 @@ function tieneRolAdminActivo(usuario) {
   );
 }
 
+function usuarioTieneRolActivo(usuario) {
+  return (usuario?.usuario_rol || []).some(({ roles }) =>
+    roles &&
+    String(roles.estado).toUpperCase() === 'ACTIVO'
+  );
+}
+
 function usuarioTieneRolPermitido(usuario, rolesPermitidos) {
   if (!Array.isArray(rolesPermitidos) || rolesPermitidos.length === 0) {
     return false;
@@ -131,5 +138,6 @@ module.exports = {
   obtenerPermisosEfectivos,
   obtenerPermisosRecomendados,
   tieneRolAdminActivo,
+  usuarioTieneRolActivo,
   usuarioTieneRolPermitido,
 };

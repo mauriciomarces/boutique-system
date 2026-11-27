@@ -232,6 +232,10 @@ app.post("/analyze-and-classify", async (req, res) => {
       typeof classification.nivel_riesgo !== "string" ||
       !Array.isArray(classification.factores) ||
       !Array.isArray(classification.camino_arbol) ||
+      !classification.recorrido_arbol ||
+      !Array.isArray(classification.recorrido_arbol.pasos) ||
+      !classification.recorrido_arbol.hoja ||
+      typeof classification.recorrido_arbol.hoja.clasificacion !== "string" ||
       (classification.probabilidad !== undefined &&
         (typeof classification.probabilidad !== "number" ||
           classification.probabilidad < 0 ||

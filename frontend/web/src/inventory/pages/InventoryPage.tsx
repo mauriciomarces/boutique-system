@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import AdministrationLayout from "../../administration/components/AdministrationLayout";
 import LogoutButton from "../../auth/components/LogoutButton";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
 
 import { getProducts } from "../../products/services/productsApi";
 import type { Product, ProductVariant } from "../../products/types/products.types";
@@ -15,6 +18,7 @@ import type {
   InventoryItem,
   InventoryMovement,
 } from "../types/inventory.types";
+import { matchesLocalDateRange } from "../../utils/dateFilters";
 
 function asNumber(value: number | string | null | undefined): number {
   const number = Number(value ?? 0);
@@ -58,8 +62,12 @@ function InventoryPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const [stockStatus, setStockStatus] = useState<"TODOS" | "BAJO" | "DISPONIBLE">("TODOS");
+  const [movementSearch, setMovementSearch] = useState("");
+  const [movementType, setMovementType] = useState("");
+  const [movementFrom, setMovementFrom] = useState("");
+  const [movementTo, setMovementTo] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
@@ -128,7 +136,8 @@ function InventoryPage() {
       const isLow =
         asNumber(item.cantidad) <= asNumber(item.cantidad_minima);
 
-      if (lowStockOnly && !isLow) return false;
+      if (stockStatus === "BAJO" && !isLow) return false;
+      if (stockStatus === "DISPONIBLE" && isLow) return false;
       if (!term) return true;
 
       const variant = variantMap.get(String(item.variante_producto_id));
@@ -147,17 +156,39 @@ function InventoryPage() {
 
       return searchable.includes(term);
     });
-  }, [items, lowStockOnly, search, variantMap]);
+  }, [items, stockStatus, search, variantMap]);
+  const filteredMovements = useMemo(() => {
+    const term = movementSearch.trim().toLocaleLowerCase("es");
+
+    return movements.filter((movement) => {
+      const variant = variantMap.get(String(movement.variante_producto_id));
+      const date = movement.creado_en || movement.created_at;
+      const searchable = [
+        movement.id,
+        movement.tipo_movimiento,
+        movement.referencia_tipo,
+        movement.referencia_id,
+        movement.motivo,
+        getVariantLabel(movement.variante_producto_id, variantMap),
+        variant?.variant.sku,
+      ].filter(Boolean).join(" ").toLocaleLowerCase("es");
+
+      return (
+        (!term || searchable.includes(term)) &&
+        (!movementType || movement.tipo_movimiento === movementType) &&
+        matchesLocalDateRange(date, movementFrom, movementTo)
+      );
+    });
+  }, [movements, movementSearch, movementType, movementFrom, movementTo, variantMap]);
+  const inventoryPagination = usePagination(filteredItems);
+  const movementPagination = usePagination(filteredMovements);
 
   return (
-    <div className="theme-bg min-h-screen">
-      <div className="mx-auto flex min-h-screen max-w-[1600px] gap-6 px-4 py-5 sm:px-6 lg:px-8">
-        <AdministrationSidebar
-          sidebarOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-
-        <main className="min-w-0 flex-1">
+    <AdministrationLayout
+      sidebarOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    >
+      <main className="mx-auto min-h-screen w-full max-w-[1600px] min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
           <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <button
@@ -238,21 +269,28 @@ function InventoryPage() {
           <section className="glass soft-shadow mb-6 rounded-2xl border theme-border p-4 sm:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold theme-text">Existencias</h2>
-              <label className="flex items-center gap-2 text-sm theme-text">
-                <input
-                  type="checkbox"
-                  checked={lowStockOnly}
-                  onChange={(event) => setLowStockOnly(event.target.checked)}
-                  className="h-4 w-4 rounded"
-                />
-                Mostrar solo stock bajo
-              </label>
+              <select
+                value={stockStatus}
+                onChange={(event) => {
+                    setStockStatus(event.target.value as typeof stockStatus);
+                    inventoryPagination.setPage(1);
+                  }}
+                aria-label="Filtrar existencias por nivel de stock"
+                className="rounded-xl border theme-border bg-[var(--bg)] px-3 py-2 text-sm theme-text"
+              >
+                <option value="TODOS">Todos los niveles</option>
+                <option value="BAJO">Stock bajo</option>
+                <option value="DISPONIBLE">Disponible</option>
+              </select>
             </div>
 
             <input
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                inventoryPagination.setPage(1);
+              }}
               placeholder="Buscar por producto, SKU, talla o color..."
               className="mb-4 w-full rounded-xl border theme-border bg-[var(--bg)] px-4 py-3 text-sm theme-text outline-none focus:ring-2 focus:ring-[var(--accent)]"
             />
@@ -276,7 +314,7 @@ function InventoryPage() {
                   </thead>
 
                   <tbody>
-                    {filteredItems.map((item) => {
+                    {inventoryPagination.pageItems.map((item) => {
                       const low =
                         asNumber(item.cantidad) <= asNumber(item.cantidad_minima);
                       const variant = variantMap.get(
@@ -347,6 +385,14 @@ function InventoryPage() {
                 ? `\u00DAltima actualizaci\u00F3n: ${formatDate(lastUpdated)}`
                 : ""}
             </p>
+            <PaginationControls
+              page={inventoryPagination.page}
+              pageCount={inventoryPagination.pageCount}
+              pageSize={inventoryPagination.pageSize}
+              total={inventoryPagination.total}
+              onPageChange={inventoryPagination.setPage}
+              onPageSizeChange={inventoryPagination.setPageSize}
+            />
           </section>
 
           <section className="glass soft-shadow rounded-2xl border theme-border p-4 sm:p-5">
@@ -355,8 +401,60 @@ function InventoryPage() {
                 Historial de movimientos
               </h2>
               <span className="text-xs theme-text-muted">
-                {movements.length} registros
+                {filteredMovements.length} de {movements.length} registros
               </span>
+            </div>
+
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <input
+                type="search"
+                value={movementSearch}
+                onChange={(event) => {
+                  setMovementSearch(event.target.value);
+                  movementPagination.setPage(1);
+                }}
+                placeholder="Buscar producto, referencia o motivo"
+                aria-label="Buscar movimientos de inventario"
+                className="w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2 text-sm theme-text"
+              />
+              <select
+                value={movementType}
+                onChange={(event) => {
+                  setMovementType(event.target.value);
+                  movementPagination.setPage(1);
+                }}
+                aria-label="Filtrar movimientos por tipo"
+                className="rounded-xl border theme-border bg-[var(--bg)] px-3 py-2 text-sm theme-text"
+              >
+                <option value="">Todos los tipos</option>
+                <option value="ENTRADA">Entrada</option>
+                <option value="SALIDA">Salida</option>
+                <option value="AJUSTE">Ajuste</option>
+              </select>
+              <label className="text-sm theme-text">
+                Desde
+                <input
+                  type="date"
+                  value={movementFrom}
+                  onChange={(event) => {
+                    setMovementFrom(event.target.value);
+                    movementPagination.setPage(1);
+                  }}
+                  className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2"
+                />
+              </label>
+              <label className="text-sm theme-text">
+                Hasta
+                <input
+                  type="date"
+                  value={movementTo}
+                  onChange={(event) => {
+                    setMovementTo(event.target.value);
+                    movementPagination.setPage(1);
+                  }}
+                  className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2"
+                />
+              </label>
             </div>
 
             {loading && movements.length === 0 ? (
@@ -366,6 +464,10 @@ function InventoryPage() {
             ) : movements.length === 0 ? (
               <p className="py-8 text-center text-sm theme-text-soft">
                 No hay movimientos registrados.
+              </p>
+            ) : filteredMovements.length === 0 ? (
+              <p className="py-8 text-center text-sm theme-text-soft">
+                No hay movimientos que coincidan con los filtros.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -381,7 +483,7 @@ function InventoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {movements.map((movement) => (
+                    {movementPagination.pageItems.map((movement) => (
                       <tr
                         key={String(movement.id)}
                         className="border-b theme-border last:border-b-0"
@@ -414,10 +516,19 @@ function InventoryPage() {
                 </table>
               </div>
             )}
+            {movements.length > 0 && (
+              <PaginationControls
+                page={movementPagination.page}
+                pageCount={movementPagination.pageCount}
+                pageSize={movementPagination.pageSize}
+                total={movementPagination.total}
+                onPageChange={movementPagination.setPage}
+                onPageSizeChange={movementPagination.setPageSize}
+              />
+            )}
           </section>
-        </main>
-      </div>
-    </div>
+      </main>
+    </AdministrationLayout>
   );
 }
 

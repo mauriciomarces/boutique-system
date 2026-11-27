@@ -5,7 +5,10 @@
 } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
+import AdministrationLayout from "../../administration/components/AdministrationLayout";
 import LogoutButton from "../../auth/components/LogoutButton";
 import type {
   Client,
@@ -25,6 +28,7 @@ import {
   type ClientFormErrors,
 } from "../utils/clientsValidation";
 import usePermissions from "../../auth/hooks/usePermissions";
+import { matchesLocalDateRange } from "../../utils/dateFilters";
 
 function sanitizeClientName(value: string): string {
   return value
@@ -33,7 +37,8 @@ function sanitizeClientName(value: string): string {
 }
 const EMPTY_FORM: ClientForm = {
   nombre: "",
-  apellido: "",
+  apellido_paterno: "",
+  apellido_materno: "",
   telefono: "",
   correo: "",
 };
@@ -42,6 +47,9 @@ function ClientsPage() {
   const { can } = usePermissions();
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"TODOS" | "ACTIVO" | "INACTIVO">("ACTIVO");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -84,8 +92,12 @@ function ClientsPage() {
   }, []);
 
   const visibleClients = useMemo(() => {
-    return clients;
-  }, [clients]);
+    return clients.filter((client) =>
+      (statusFilter === "TODOS" || client.estado === statusFilter) &&
+      matchesLocalDateRange(client.creado_en, createdFrom, createdTo),
+    );
+  }, [clients, statusFilter, createdFrom, createdTo]);
+  const clientPagination = usePagination(visibleClients);
 
   const openCreate = () => {
     setError("");
@@ -103,7 +115,8 @@ function ClientsPage() {
 
     const clientForm: ClientForm = {
       nombre: client.nombre,
-      apellido: client.apellido,
+      apellido_paterno: client.apellido_paterno,
+      apellido_materno: client.apellido_materno || "",
       telefono: client.telefono || "",
       correo: client.correo || "",
     };
@@ -224,13 +237,17 @@ function ClientsPage() {
     event: FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
+    clientPagination.setPage(1);
     await loadClients(search);
   };
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="theme-bg min-h-screen">
+    <AdministrationLayout
+      sidebarOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    >
       <header className="border-b theme-border bg-[var(--nav-bg)]">
         <div className="mx-auto flex h-[76px] max-w-[1500px] items-center justify-between px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
@@ -276,12 +293,7 @@ function ClientsPage() {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1500px] gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <AdministrationSidebar
-          sidebarOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-
+      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
         <main className="min-w-0 flex-1">
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
@@ -372,6 +384,66 @@ function ClientsPage() {
               </form>
             </div>
 
+            <div className="flex flex-wrap gap-2 border-b theme-border px-5 py-3">
+              {([
+                ["ACTIVO", "Activos"],
+                ["INACTIVO", "Inactivos"],
+                ["TODOS", "Todos"],
+              ] as const).map(([value, label]) => {
+                const count = value === "TODOS"
+                  ? clients.length
+                  : clients.filter((client) => client.estado === value).length;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(value);
+                      clientPagination.setPage(1);
+                    }}
+                    aria-pressed={statusFilter === value}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium ${
+                      statusFilter === value
+                        ? "border-[var(--accent)] bg-[var(--bg-secondary)] theme-text"
+                        : "theme-border theme-text-soft"
+                    }`}
+                  >
+                    {label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid gap-3 border-b theme-border px-5 py-3 sm:grid-cols-3">
+              <label className="text-sm theme-text">
+                Registrado desde
+                <input
+                  type="date"
+                  value={createdFrom}
+                  onChange={(event) => {
+                    setCreatedFrom(event.target.value);
+                    clientPagination.setPage(1);
+                  }}
+                  className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2"
+                />
+              </label>
+              <label className="text-sm theme-text">
+                Registrado hasta
+                <input
+                  type="date"
+                  value={createdTo}
+                  onChange={(event) => {
+                    setCreatedTo(event.target.value);
+                    clientPagination.setPage(1);
+                  }}
+                  className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2"
+                />
+              </label>
+              <p className="self-end text-sm theme-text-muted">
+                {visibleClients.length} de {clients.length} clientes
+              </p>
+            </div>
+
             {loading ? (
               <div className="p-8 text-sm theme-text-soft">
                 Cargando clientes...
@@ -388,6 +460,7 @@ function ClientsPage() {
                 </p>
               </div>
             ) : (
+              <>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-[var(--bg-secondary)] theme-text-soft">
@@ -411,7 +484,7 @@ function ClientsPage() {
                   </thead>
 
                   <tbody>
-                    {visibleClients.map((client) => (
+                    {clientPagination.pageItems.map((client) => (
                       <tr
                         key={client.id}
                         className="border-t theme-border"
@@ -419,7 +492,9 @@ function ClientsPage() {
                         <td className="px-5 py-4">
                           <p className="font-medium theme-text">
                             {client.nombre}{" "}
-                            {client.apellido}
+                            {[client.apellido_paterno, client.apellido_materno]
+                              .filter(Boolean)
+                              .join(" ")}
                           </p>
 
                           <p className="mt-1 text-xs theme-text-muted">
@@ -489,6 +564,15 @@ function ClientsPage() {
                   </tbody>
                 </table>
               </div>
+              <PaginationControls
+                page={clientPagination.page}
+                pageCount={clientPagination.pageCount}
+                pageSize={clientPagination.pageSize}
+                total={clientPagination.total}
+                onPageChange={clientPagination.setPage}
+                onPageSizeChange={clientPagination.setPageSize}
+              />
+              </>
             )}
           </section>
         </main>
@@ -566,36 +650,71 @@ function ClientsPage() {
 
               <div>
                 <label
-                  htmlFor="client-apellido"
+                  htmlFor="client-apellido-paterno"
                   className="mb-1.5 block text-sm font-medium theme-text"
                 >
-                  Apellido
+                  Apellido paterno
                 </label>
 
                 <input
-                  id="client-apellido"
+                  id="client-apellido-paterno"
                   required
-                  value={form.apellido}
+                  value={form.apellido_paterno}
                   maxLength={100}
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
-                      apellido: sanitizeClientName(event.target.value),
+                      apellido_paterno: sanitizeClientName(event.target.value),
                     }))
                   }
                   onBlur={handleFieldBlur}
                   placeholder="Apellido"
                   className={`w-full rounded-xl border ${
-                    fieldErrors.apellido
+                    fieldErrors.apellido_paterno
                       ? "border-red-400"
                       : "theme-border"
                   } bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text`}
-                  aria-invalid={Boolean(fieldErrors.apellido)}
+                  aria-invalid={Boolean(fieldErrors.apellido_paterno)}
                 />
 
-                {fieldErrors.apellido && (
+                {fieldErrors.apellido_paterno && (
                   <p className="mt-1 text-xs text-red-600">
-                    {fieldErrors.apellido}
+                    {fieldErrors.apellido_paterno}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="client-apellido-materno"
+                  className="mb-1.5 block text-sm font-medium theme-text"
+                >
+                  Apellido materno (opcional)
+                </label>
+
+                <input
+                  id="client-apellido-materno"
+                  value={form.apellido_materno}
+                  maxLength={100}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      apellido_materno: sanitizeClientName(event.target.value),
+                    }))
+                  }
+                  onBlur={handleFieldBlur}
+                  placeholder="Apellido materno"
+                  className={`w-full rounded-xl border ${
+                    fieldErrors.apellido_materno
+                      ? "border-red-400"
+                      : "theme-border"
+                  } bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text`}
+                  aria-invalid={Boolean(fieldErrors.apellido_materno)}
+                />
+
+                {fieldErrors.apellido_materno && (
+                  <p className="mt-1 text-xs text-red-600">
+                    {fieldErrors.apellido_materno}
                   </p>
                 )}
               </div>
@@ -700,7 +819,7 @@ function ClientsPage() {
           </form>
         </div>
       )}
-    </div>
+    </AdministrationLayout>
   );
 }
 

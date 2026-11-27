@@ -67,7 +67,10 @@ export async function createClient(
     .trim()
     .replace(/\s+/g, " ");
 
-  const apellido = data.apellido
+  const apellido_paterno = data.apellido_paterno
+    .trim()
+    .replace(/\s+/g, " ");
+  const apellido_materno = data.apellido_materno
     .trim()
     .replace(/\s+/g, " ");
 
@@ -81,7 +84,8 @@ export async function createClient(
     method: "POST",
     body: JSON.stringify({
       nombre,
-      apellido,
+      apellido_paterno,
+      apellido_materno: apellido_materno || null,
       telefono: telefono || null,
       correo: correo || null,
     }),
@@ -96,7 +100,10 @@ export async function updateClient(
     .trim()
     .replace(/\s+/g, " ");
 
-  const apellido = data.apellido
+  const apellido_paterno = data.apellido_paterno
+    .trim()
+    .replace(/\s+/g, " ");
+  const apellido_materno = data.apellido_materno
     .trim()
     .replace(/\s+/g, " ");
 
@@ -110,7 +117,8 @@ export async function updateClient(
     method: "PUT",
     body: JSON.stringify({
       nombre,
-      apellido,
+      apellido_paterno,
+      apellido_materno: apellido_materno || null,
       telefono: telefono || null,
       correo: correo || null,
     }),

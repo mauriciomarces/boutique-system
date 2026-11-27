@@ -106,4 +106,132 @@ describe('AppController', () => {
       });
     });
   });
+
+  describe('validación dinámica de autorización', () => {
+    const originalFetch = global.fetch;
+    const originalSecret = process.env.INTERNAL_SERVICE_SECRET;
+
+    const mockResponse = (status: number, body: unknown) =>
+      ({
+        status,
+        ok: status >= 200 && status < 300,
+        json: jest.fn().mockResolvedValue(body),
+      }) as unknown as globalThis.Response;
+
+    beforeEach(() => {
+      process.env.INTERNAL_SERVICE_SECRET = 'test-internal-secret';
+    });
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+
+      if (originalSecret === undefined) {
+        delete process.env.INTERNAL_SERVICE_SECRET;
+      } else {
+        process.env.INTERNAL_SERVICE_SECRET = originalSecret;
+      }
+
+      jest.restoreAllMocks();
+    });
+
+    describe('requireAnalysisPermission', () => {
+      it('acepta una autorización válida', async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+          mockResponse(200, {
+            valid: true,
+            user: { id: '10' },
+            permission: 'USUARIOS_LEER',
+          }),
+        );
+
+        await expect(
+          (appController as any).requireAnalysisPermission('Bearer test-token'),
+        ).resolves.toBeUndefined();
+      });
+
+      it('rechaza una respuesta 2xx sin valid true', async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+          mockResponse(200, {
+            valid: false,
+            user: { id: '10' },
+          }),
+        );
+
+        await expect(
+          (appController as any).requireAnalysisPermission('Bearer test-token'),
+        ).rejects.toThrow('La respuesta de autorización de análisis no es válida.');
+      });
+
+      it('rechaza una respuesta 2xx sin usuario válido', async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+          mockResponse(200, {
+            valid: true,
+            user: { id: '0' },
+          }),
+        );
+
+        await expect(
+          (appController as any).requireAnalysisPermission('Bearer test-token'),
+        ).rejects.toThrow('La respuesta de autorización de análisis no es válida.');
+      });
+
+      it('rechaza errores de comunicación', async () => {
+        global.fetch = jest.fn().mockRejectedValue(new Error('connection failed'));
+
+        await expect(
+          (appController as any).requireAnalysisPermission('Bearer test-token'),
+        ).rejects.toThrow();
+      });
+    });
+
+    describe('requireReportPermission', () => {
+      it('acepta una autorización válida', async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+          mockResponse(200, {
+            valid: true,
+            user: { id: '10' },
+            permission: 'VENTAS_LEER',
+          }),
+        );
+
+        await expect(
+          (appController as any).requireReportPermission('Bearer test-token'),
+        ).resolves.toBeUndefined();
+      });
+
+      it('rechaza una respuesta 2xx sin valid true', async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+          mockResponse(200, {
+            valid: false,
+            user: { id: '10' },
+          }),
+        );
+
+        await expect(
+          (appController as any).requireReportPermission('Bearer test-token'),
+        ).rejects.toThrow('La respuesta de autorización de reportes no es válida.');
+      });
+
+      it('rechaza una respuesta 2xx sin usuario válido', async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+          mockResponse(200, {
+            valid: true,
+            user: {},
+          }),
+        );
+
+        await expect(
+          (appController as any).requireReportPermission('Bearer test-token'),
+        ).rejects.toThrow('La respuesta de autorización de reportes no es válida.');
+      });
+
+      it('rechaza errores de comunicación', async () => {
+        global.fetch = jest.fn().mockRejectedValue(new Error('connection failed'));
+
+        await expect(
+          (appController as any).requireReportPermission('Bearer test-token'),
+        ).rejects.toThrow();
+      });
+    });
+  });
 });

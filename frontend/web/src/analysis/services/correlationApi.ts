@@ -30,6 +30,22 @@ export interface AnalysisTrace {
     model_version: string;
     factores: string[];
     camino_arbol: string[];
+    recorrido_arbol?: {
+      pasos: Array<{
+        numero: number;
+        variable: string;
+        valor: number;
+        umbral: number;
+        condicion: string;
+        condicion_satisfecha: boolean;
+        rama: "izquierda" | "derecha";
+      }>;
+      hoja: {
+        nodo: number;
+        clasificacion: "NORMAL" | "ANOMALO";
+        muestras_entrenamiento: number;
+      };
+    };
   };
   notification_status?: string;
 }

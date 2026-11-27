@@ -96,3 +96,28 @@ def test_grouped_split_rejects_too_few_families():
     frame = frame[frame["scenario"].isin(["familia_0", "familia_1"])]
     with pytest.raises(DatasetError):
         grouped_scenario_split(frame, 0.25, 42)
+
+
+def test_decision_path_details_report_the_observed_value_branch_and_leaf():
+    from sklearn.tree import DecisionTreeClassifier
+
+    from app.train_model import decision_path_details
+
+    features = pd.DataFrame({"failed_login_count": [0, 1, 4, 5]})
+    labels = [0, 0, 1, 1]
+    model = DecisionTreeClassifier(max_depth=1, random_state=42)
+    model.fit(features, labels)
+
+    details = decision_path_details(
+        model,
+        pd.DataFrame({"failed_login_count": [5]}),
+    )
+
+    assert len(details["pasos"]) == 1
+    step = details["pasos"][0]
+    assert step["variable"] == "failed_login_count"
+    assert step["valor"] == 5
+    assert step["condicion"] == "failed_login_count <= 2.500"
+    assert step["condicion_satisfecha"] is False
+    assert step["rama"] == "derecha"
+    assert details["hoja"]["clasificacion"] == "ANOMALO"

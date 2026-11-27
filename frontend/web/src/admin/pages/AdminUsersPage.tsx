@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, KeyboardEvent, ClipboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
+import AdministrationLayout from "../../administration/components/AdministrationLayout";
 import LogoutButton from "../../auth/components/LogoutButton";
 import RolePermissionMatrix from "../components/RolePermissionMatrix";
 import { fetchCurrentUserAccess } from "../../auth/services/permissions";
+import { matchesLocalDateRange } from "../../utils/dateFilters";
 
 declare global {
   namespace JSX {
@@ -30,10 +34,12 @@ interface Role {
 interface User {
   id: string;
   nombre: string;
-  apellido: string;
+  apellido_paterno: string;
+  apellido_materno: string | null;
   correo: string;
   telefono: string | null;
   estado: string;
+  creado_en?: string;
   correo_verificado?: boolean;
   usuario_rol?: Array<{ roles?: Role | null }>;
 }
@@ -64,8 +70,14 @@ const permissionLabels: Record<string, string> = {
   NOTIFICACIONES_LEER: "Consultar notificaciones",
 };
 
-const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?: [A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/;
+const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/;
 const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+function fullName(user: Pick<User, "nombre" | "apellido_paterno" | "apellido_materno">) {
+  return [user.nombre, user.apellido_paterno, user.apellido_materno]
+    .filter(Boolean)
+    .join(" ");
+}
 
 async function request<T>(
   path: string,
@@ -110,9 +122,12 @@ function AdminUsersPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [roleStatusFilter, setRoleStatusFilter] = useState<"TODOS" | "ACTIVO" | "INACTIVO">("ACTIVO");
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [userRoleFilter, setUserRoleFilter] = useState("");
+  const [userCreatedFrom, setUserCreatedFrom] = useState("");
+  const [userCreatedTo, setUserCreatedTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -127,7 +142,8 @@ function AdminUsersPage() {
   });
   const [userForm, setUserForm] = useState({
     nombre: "",
-    apellido: "",
+    apellido_paterno: "",
+    apellido_materno: "",
     correo: "",
     telefono: "",
     rol_id: "",
@@ -141,6 +157,12 @@ function AdminUsersPage() {
           role.nombre !== "ADMIN",
       ),
     [roles],
+  );
+  const visibleRoles = useMemo(
+    () => roleStatusFilter === "TODOS"
+      ? roles
+      : roles.filter((role) => role.estado === roleStatusFilter),
+    [roles, roleStatusFilter],
   );
 
   const loadData = async () => {
@@ -187,24 +209,24 @@ function AdminUsersPage() {
         ? users.filter((user) => user.estado !== "ACTIVO")
         : users.filter((user) => user.estado === "ACTIVO");
 
-    return value
-      ? source.filter((user) =>
-          `${user.nombre} ${user.apellido} ${user.correo}`
-            .toLowerCase()
-            .includes(value),
-        )
-      : source;
-  }, [search, section, users]);
+    return source.filter((user) => {
+      const matchesSearch = !value ||
+        `${fullName(user)} ${user.correo}`.toLowerCase().includes(value);
+      const matchesRole = !userRoleFilter ||
+        user.usuario_rol?.some(({ roles: userRole }) => userRole?.nombre === userRoleFilter);
+      return (
+        matchesSearch &&
+        matchesRole &&
+        matchesLocalDateRange(user.creado_en, userCreatedFrom, userCreatedTo)
+      );
+    });
+  }, [search, section, users, userRoleFilter, userCreatedFrom, userCreatedTo]);
 
-  const pageSize = 8;
-  const totalPages = Math.max(
-    1,
-    Math.ceil(visibleUsers.length / pageSize),
-  );
-  const pageUsers = visibleUsers.slice(
-    (page - 1) * pageSize,
-    page * pageSize,
-  );
+  const userPagination = usePagination(visibleUsers);
+
+  useEffect(() => {
+    userPagination.setPage(1);
+  }, [section, userPagination.setPage]);
 
   const fail = (err: unknown) => {
     setNotice("");
@@ -226,7 +248,8 @@ function AdminUsersPage() {
 
   const validateUserForm = () => {
     const nombre = userForm.nombre.trim();
-    const apellido = userForm.apellido.trim();
+    const apellidoPaterno = userForm.apellido_paterno.trim();
+    const apellidoMaterno = userForm.apellido_materno.trim();
     const correo = userForm.correo.trim();
 
     if (!nameRegex.test(nombre)) {
@@ -236,10 +259,23 @@ function AdminUsersPage() {
       return false;
     }
 
-    if (!nameRegex.test(apellido)) {
+    if (!nameRegex.test(apellidoPaterno)) {
       setError(
-        "El apellido solo puede contener letras y espacios entre palabras.",
+        "El apellido paterno solo puede contener letras y espacios válidos.",
       );
+      return false;
+    }
+    if (apellidoPaterno.length > 100) {
+      setError("El apellido paterno no puede superar los 100 caracteres.");
+      return false;
+    }
+
+    if (apellidoMaterno && !nameRegex.test(apellidoMaterno)) {
+      setError("El apellido materno solo puede contener letras y espacios válidos.");
+      return false;
+    }
+    if (apellidoMaterno.length > 100) {
+      setError("El apellido materno no puede superar los 100 caracteres.");
       return false;
     }
 
@@ -263,7 +299,7 @@ function AdminUsersPage() {
       return;
     }
 
-    if (!/[A-Za-zÁÉÍÓÚáéíóúÑñÜü ]/.test(event.key)) {
+    if (!/[A-Za-zÁÉÍÓÚáéíóúÑñÜü '-]/.test(event.key)) {
       event.preventDefault();
       return;
     }
@@ -284,7 +320,7 @@ function AdminUsersPage() {
 
     if (
       nativeEvent.data &&
-      !/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü ]+$/.test(nativeEvent.data)
+      !/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü '-]+$/.test(nativeEvent.data)
     ) {
       event.preventDefault();
     }
@@ -338,7 +374,8 @@ function AdminUsersPage() {
         body: JSON.stringify({
           ...userForm,
           nombre: userForm.nombre.trim(),
-          apellido: userForm.apellido.trim(),
+          apellido_paterno: userForm.apellido_paterno.trim(),
+          apellido_materno: userForm.apellido_materno.trim() || null,
           correo: userForm.correo.trim(),
         }),
       });
@@ -347,7 +384,8 @@ function AdminUsersPage() {
 
       setUserForm({
         nombre: "",
-        apellido: "",
+        apellido_paterno: "",
+        apellido_materno: "",
         correo: "",
         telefono: "",
         rol_id: "",
@@ -382,7 +420,8 @@ function AdminUsersPage() {
         method: "PUT",
         body: JSON.stringify({
           nombre: userForm.nombre.trim(),
-          apellido: userForm.apellido.trim(),
+          apellido_paterno: userForm.apellido_paterno.trim(),
+          apellido_materno: userForm.apellido_materno.trim() || null,
           correo: userForm.correo.trim(),
           telefono: userForm.telefono || null,
         }),
@@ -504,7 +543,7 @@ function AdminUsersPage() {
       );
 
       setNotice(
-        `Rol ${role.nombre} quitado de ${user.nombre} ${user.apellido}.`,
+        `Rol ${role.nombre} quitado de ${fullName(user)}.`,
       );
 
       await loadData();
@@ -582,7 +621,8 @@ function AdminUsersPage() {
 
     setUserForm({
       nombre: user.nombre,
-      apellido: user.apellido,
+      apellido_paterno: user.apellido_paterno,
+      apellido_materno: user.apellido_materno || "",
       correo: user.correo,
       telefono: user.telefono || "",
       rol_id: "",
@@ -605,7 +645,8 @@ function AdminUsersPage() {
 
     setUserForm({
       nombre: "",
-      apellido: "",
+      apellido_paterno: "",
+      apellido_materno: "",
       correo: "",
       telefono: "",
       rol_id: "",
@@ -615,7 +656,10 @@ function AdminUsersPage() {
   };
 
   return (
-    <div className="theme-bg min-h-screen">
+    <AdministrationLayout
+      sidebarOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    >
       <header className="relative border-b theme-border bg-[var(--nav-bg)]">
         <div className="mx-auto flex h-[76px] max-w-[1500px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
@@ -647,7 +691,7 @@ function AdminUsersPage() {
 
             <span className="hidden text-sm theme-text-soft sm:block">
               {currentUser
-                ? `${currentUser.nombre} ${currentUser.apellido}`
+                ? fullName(currentUser)
                 : "Administrador"}
             </span>
 
@@ -656,12 +700,7 @@ function AdminUsersPage() {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:px-8">
-        <AdministrationSidebar
-          sidebarOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-
+      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
         <main className="min-w-0 flex-1">
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
@@ -740,10 +779,36 @@ function AdminUsersPage() {
                   <h2 className="font-semibold theme-text">
                     Roles disponibles
                   </h2>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {([
+                      ["ACTIVO", "Activos"],
+                      ["INACTIVO", "Inactivos"],
+                      ["TODOS", "Todos"],
+                    ] as const).map(([value, label]) => {
+                      const count = value === "TODOS"
+                        ? roles.length
+                        : roles.filter((role) => role.estado === value).length;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setRoleStatusFilter(value)}
+                          aria-pressed={roleStatusFilter === value}
+                          className={`rounded-xl border px-3 py-2 text-sm font-medium ${
+                            roleStatusFilter === value
+                              ? "border-[var(--accent)] bg-[var(--bg-secondary)] theme-text"
+                              : "theme-border theme-text-soft"
+                          }`}
+                        >
+                          {label} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="divide-y theme-border">
-                  {roles.map((role) => (
+                  {visibleRoles.map((role) => (
                     <div
                       key={role.id}
                       className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
@@ -888,11 +953,57 @@ function AdminUsersPage() {
                   value={search}
                   onChange={(event) => {
                     setSearch(event.target.value);
-                    setPage(1);
+                    userPagination.setPage(1);
                   }}
                   placeholder="Buscar por nombre o correo"
                   className="w-full rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-2.5 text-sm theme-text sm:w-72"
                 />
+                <select
+                  value={userRoleFilter}
+                  onChange={(event) => {
+                    setUserRoleFilter(event.target.value);
+                    userPagination.setPage(1);
+                  }}
+                  aria-label="Filtrar usuarios por rol"
+                  className="rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2.5 text-sm theme-text"
+                >
+                  <option value="">Todos los roles</option>
+                  {[...new Set(roles.map((role) => role.nombre))]
+                    .sort()
+                    .map((roleName) => (
+                      <option key={roleName} value={roleName}>{roleName}</option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="grid gap-3 border-b theme-border px-5 py-3 sm:grid-cols-3">
+                <label className="text-sm theme-text">
+                  Registrado desde
+                  <input
+                    type="date"
+                    value={userCreatedFrom}
+                    onChange={(event) => {
+                      setUserCreatedFrom(event.target.value);
+                      userPagination.setPage(1);
+                    }}
+                    className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm theme-text">
+                  Registrado hasta
+                  <input
+                    type="date"
+                    value={userCreatedTo}
+                    onChange={(event) => {
+                      setUserCreatedTo(event.target.value);
+                      userPagination.setPage(1);
+                    }}
+                    className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2"
+                  />
+                </label>
+                <p className="self-end text-sm theme-text-muted">
+                  {visibleUsers.length} usuarios coinciden con los filtros
+                </p>
               </div>
 
               <div className="overflow-x-auto">
@@ -918,14 +1029,14 @@ function AdminUsersPage() {
                   </thead>
 
                   <tbody>
-                    {pageUsers.map((user) => (
+                    {userPagination.pageItems.map((user) => (
                       <tr
                         key={user.id}
                         className="border-t theme-border"
                       >
                         <td className="px-5 py-4">
                           <p className="font-medium theme-text">
-                            {user.nombre} {user.apellido}
+                            {fullName(user)}
                           </p>
 
                           <p className="mt-1 text-xs theme-text-muted">
@@ -1043,35 +1154,14 @@ function AdminUsersPage() {
                 </table>
               </div>
 
-              <div className="flex items-center justify-between border-t theme-border px-5 py-4 text-sm theme-text-soft">
-                <span>
-                  Página {page} de {totalPages}
-                </span>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={page === 1}
-                    onClick={() =>
-                      setPage((value) => value - 1)
-                    }
-                    className="rounded-lg border theme-border px-3 py-1.5 disabled:opacity-40"
-                  >
-                    Anterior
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={page === totalPages}
-                    onClick={() =>
-                      setPage((value) => value + 1)
-                    }
-                    className="rounded-lg border theme-border px-3 py-1.5 disabled:opacity-40"
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              </div>
+              <PaginationControls
+                page={userPagination.page}
+                pageCount={userPagination.pageCount}
+                pageSize={userPagination.pageSize}
+                total={userPagination.total}
+                onPageChange={userPagination.setPage}
+                onPageSizeChange={userPagination.setPageSize}
+              />
             </section>
           )}
         </main>
@@ -1128,17 +1218,36 @@ function AdminUsersPage() {
                 required
                 pattern={nameRegex.source}
                 title="Usa únicamente letras y espacios entre palabras"
-                value={userForm.apellido}
+                value={userForm.apellido_paterno}
+                maxLength={100}
                 onKeyDown={handleNameKeyDown}
                 onBeforeInput={handleNameBeforeInput}
                 onPaste={handleNamePaste}
                 onChange={(event) =>
                   setUserForm({
                     ...userForm,
-                    apellido: event.target.value,
+                    apellido_paterno: event.target.value,
                   })
                 }
-                placeholder="Apellido"
+                placeholder="Apellido paterno"
+                className="rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text"
+              />
+
+              <input
+                pattern={nameRegex.source}
+                title="Usa únicamente letras y espacios entre palabras"
+                value={userForm.apellido_materno}
+                maxLength={100}
+                onKeyDown={handleNameKeyDown}
+                onBeforeInput={handleNameBeforeInput}
+                onPaste={handleNamePaste}
+                onChange={(event) =>
+                  setUserForm({
+                    ...userForm,
+                    apellido_materno: event.target.value,
+                  })
+                }
+                placeholder="Apellido materno (opcional)"
                 className="rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text"
               />
 
@@ -1262,17 +1371,36 @@ function AdminUsersPage() {
                 required
                 pattern={nameRegex.source}
                 title="Usa únicamente letras y espacios entre palabras"
-                value={userForm.apellido}
+                value={userForm.apellido_paterno}
+                maxLength={100}
                 onKeyDown={handleNameKeyDown}
                 onBeforeInput={handleNameBeforeInput}
                 onPaste={handleNamePaste}
                 onChange={(event) =>
                   setUserForm({
                     ...userForm,
-                    apellido: event.target.value,
+                    apellido_paterno: event.target.value,
                   })
                 }
-                placeholder="Apellido"
+                placeholder="Apellido paterno"
+                className="rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text"
+              />
+
+              <input
+                pattern={nameRegex.source}
+                title="Usa únicamente letras y espacios entre palabras"
+                value={userForm.apellido_materno}
+                maxLength={100}
+                onKeyDown={handleNameKeyDown}
+                onBeforeInput={handleNameBeforeInput}
+                onPaste={handleNamePaste}
+                onChange={(event) =>
+                  setUserForm({
+                    ...userForm,
+                    apellido_materno: event.target.value,
+                  })
+                }
+                placeholder="Apellido materno (opcional)"
                 className="rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-3 text-sm theme-text"
               />
 
@@ -1344,7 +1472,7 @@ function AdminUsersPage() {
                 </h2>
 
                 <p className="mt-1 text-sm theme-text-soft">
-                  {selectedUser.nombre} {selectedUser.apellido}
+                  {fullName(selectedUser)}
                 </p>
               </div>
 
@@ -1382,7 +1510,7 @@ function AdminUsersPage() {
           </section>
         </div>
       )}
-    </div>
+    </AdministrationLayout>
   );
 }
 

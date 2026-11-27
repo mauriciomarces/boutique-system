@@ -37,7 +37,8 @@ export interface Payment {
 export interface SaleClient {
   id: string;
   nombre: string;
-  apellido: string;
+  apellido_paterno: string;
+  apellido_materno: string | null;
   telefono: string | null;
   correo: string | null;
   estado: "ACTIVO" | "INACTIVO";
