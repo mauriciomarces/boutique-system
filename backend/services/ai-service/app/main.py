@@ -21,6 +21,7 @@ from app.explain import build_response
 from app.train_model import (
     DatasetError,
     decision_path_conditions,
+    decision_path_details,
     load_current_metadata,
     load_current_model,
     train_decision_tree,
@@ -185,6 +186,7 @@ def predict(body: PredictRequest) -> dict[str, Any]:
         conditions=conditions,
     )
     response["camino_arbol"] = conditions
+    response["recorrido_arbol"] = decision_path_details(model, model_input)
     response["model_version"] = metadata.get("model_version", "desconocida")
     response["input_id"] = body.input_id or str(uuid4())
     response["probability_semantics"] = (

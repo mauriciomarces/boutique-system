@@ -123,6 +123,9 @@ model usuario_rol {
 model usuarios {
   id                  BigInt                @id @default(autoincrement())
   nombre              String                @db.VarChar(100)
+  apellido_paterno    String                @db.VarChar(100)
+  apellido_materno    String?               @db.VarChar(100)
+  // Columna histórica conservada durante la transición; no forma parte de la API.
   apellido            String                @db.VarChar(100)
   correo              String                @unique(map: "correo") @db.VarChar(150)
   telefono            String?               @db.VarChar(30)

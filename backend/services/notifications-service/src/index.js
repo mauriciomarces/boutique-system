@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const crypto = require('crypto');
+const { buildAnomalyMessage } = require('./anomaly-message');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 const { sendEmail, verifyMailer } = require('./mailer');
@@ -380,8 +381,7 @@ app.post('/notificaciones/analisis-anomalo', authenticateToken, async (req, res)
     const {
       analysis_id,
       nivel_riesgo,
-      model_version,
-      factores,
+      reglas_correlacion,
       event_ids,
     } = req.body || {};
 
@@ -399,15 +399,19 @@ app.post('/notificaciones/analisis-anomalo', authenticateToken, async (req, res)
     const risk = typeof nivel_riesgo === 'string'
       ? nivel_riesgo.slice(0, 50)
       : 'NO_DEFINIDO';
-    const model = typeof model_version === 'string'
-      ? model_version.slice(0, 100)
-      : 'NO_DEFINIDO';
-    const factorList = Array.isArray(factores)
-      ? factores.filter((item) => typeof item === 'string').slice(0, 8)
-      : [];
     const eventCount = Array.isArray(event_ids) ? event_ids.length : 0;
+    const ruleEvidence = reglas_correlacion && typeof reglas_correlacion === 'object'
+      ? Object.entries(reglas_correlacion)
+        .filter(([, rule]) =>
+          rule &&
+          typeof rule.description === 'string' &&
+          typeof rule.fired === 'boolean' &&
+          typeof rule.value === 'number' &&
+          Number.isFinite(rule.value),
+        )
+        .slice(0, 6)
+      : [];
     const referenceText = `Referencia del análisis: ${analysisId}.`;
-
     const existing = await prisma.notificaciones.findFirst({
       where: {
         usuario_id: usuarioId,
@@ -424,15 +428,12 @@ app.post('/notificaciones/analisis-anomalo', authenticateToken, async (req, res)
       });
     }
 
-    const message = [
-      'Se detectó un comportamiento clasificado como ANOMALO.',
-      `Nivel de riesgo: ${risk}.`,
-      `Modelo: ${model}.`,
-      `Factores: ${factorList.length ? factorList.join('; ') : 'No especificados'}.`,
-      `Eventos relacionados: ${eventCount}.`,
+    const message = buildAnomalyMessage({
+      risk,
+      ruleEvidence,
+      eventCount,
       referenceText,
-      'El resultado requiere revisión y no constituye una prueba concluyente de fraude.',
-    ].join(' ');
+    });
 
     const numericReference = /^[1-9]\d*$/.test(analysisId)
       ? BigInt(analysisId)
@@ -442,7 +443,7 @@ app.post('/notificaciones/analisis-anomalo', authenticateToken, async (req, res)
       data: {
         usuario_id: usuarioId,
         tipo: 'ANOMALIA_DETECTADA',
-        titulo: 'Comportamiento anómalo detectado',
+        titulo: 'Actividad inusual para revisar',
         mensaje: message,
         canal: 'SISTEMA',
         estado: 'PENDIENTE',

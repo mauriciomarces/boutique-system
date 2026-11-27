@@ -1,6 +1,6 @@
 # Users service
 
-## Preparar cuentas de prueba por rol
+## Preparar cuentas demostrativas por rol
 
 El comando `pnpm --filter users-service seed:role-test-users` verifica los roles
 existentes y activos y las cuentas asociadas. Las cuentas faltantes se crean en
@@ -8,13 +8,13 @@ una única transacción; las cuentas existentes nunca cambian de contraseña ni 
 asignaciones. Una cuenta existente que no coincide exactamente con su rol
 esperado detiene el proceso sin modificarla.
 
-Identificadores predeterminados:
+Identificadores predeterminados (con datos personales ficticios y correos no enrutables):
 
-- `prueba.admin@sposabella.invalid` — ADMIN
-- `prueba.supervisor@sposabella.invalid` — SUPERVISOR
-- `prueba.vendedor@sposabella.invalid` — VENDEDOR
-- `prueba.inventario@sposabella.invalid` — INVENTARIO
-- `prueba.consulta@sposabella.invalid` — CONSULTA
+- `cuenta.admin@sposabella.invalid` — ADMIN
+- `cuenta.supervisor@sposabella.invalid` — SUPERVISOR
+- `cuenta.vendedor@sposabella.invalid` — VENDEDOR
+- `cuenta.inventario@sposabella.invalid` — INVENTARIO
+- `cuenta.consulta@sposabella.invalid` — CONSULTA
 
 Los correos personalizados deben conservar el dominio no enrutable
 `@sposabella.invalid`. El script no se ejecuta en producción. Solo para cuentas

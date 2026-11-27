@@ -21,6 +21,12 @@ type NavGroup = {
 
 const navGroups: NavGroup[] = [
   {
+    title: "Inicio",
+    items: [
+      { label: "Panel principal", path: "/panel" },
+    ],
+  },
+  {
     title: "Usuarios y acceso",
     items: [
       { label: "Usuarios activos", path: "/administracion/usuarios", permission: "USUARIOS_LEER" },
@@ -79,6 +85,7 @@ function AdministrationSidebar({
         key={item.path}
         type="button"
         onClick={() => goTo(item.path)}
+        aria-current={active ? "page" : undefined}
         className={`flex w-full justify-between rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
           active
             ? "bg-[var(--bg-secondary)] theme-text"
@@ -114,9 +121,9 @@ function AdministrationSidebar({
       <aside
         className={`${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto overscroll-contain border-r theme-border bg-[var(--bg)] p-4 pt-24 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-transform duration-300 lg:sticky lg:top-0 lg:z-auto lg:block lg:h-[100dvh] lg:max-h-[100dvh] lg:w-64 lg:shrink-0 lg:translate-x-0 lg:overflow-y-auto lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}
+        } fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto overscroll-contain border-r theme-border bg-[var(--bg)] p-4 pt-24 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl transition-transform duration-300 lg:sticky lg:left-0 lg:top-0 lg:z-auto lg:block lg:h-screen lg:max-h-screen lg:w-64 lg:shrink-0 lg:translate-x-0 lg:overflow-hidden lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}
       >
-        <div className="glass soft-shadow min-h-full rounded-2xl p-4">
+        <div className="glass soft-shadow min-h-full overflow-y-auto overscroll-contain rounded-2xl p-4 pb-8 lg:h-full lg:min-h-0 lg:rounded-none">
           {navGroups.map((group, index) => {
             const items = visibleItems(group.items);
             if (items.length === 0) return null;

@@ -1,13 +1,15 @@
 ﻿export type ClientFormData = {
   nombre: string;
-  apellido: string;
+  apellido_paterno: string;
+  apellido_materno: string;
   telefono: string;
   correo: string;
 };
 
 export type ClientFormErrors = {
   nombre?: string;
-  apellido?: string;
+  apellido_paterno?: string;
+  apellido_materno?: string;
   telefono?: string;
   correo?: string;
 };
@@ -21,7 +23,8 @@ export function normalizeClientForm(
 ): ClientFormData {
   return {
     nombre: normalizeSpaces(form.nombre),
-    apellido: normalizeSpaces(form.apellido),
+    apellido_paterno: normalizeSpaces(form.apellido_paterno),
+    apellido_materno: normalizeSpaces(form.apellido_materno),
     telefono: form.telefono.trim(),
     correo: form.correo.trim().toLowerCase(),
   };
@@ -33,7 +36,8 @@ export function validateClientForm(
   const errors: ClientFormErrors = {};
 
   const nombre = normalizeSpaces(form.nombre);
-  const apellido = normalizeSpaces(form.apellido);
+  const apellidoPaterno = normalizeSpaces(form.apellido_paterno);
+  const apellidoMaterno = normalizeSpaces(form.apellido_materno);
   const telefono = form.telefono.trim();
   const correo = form.correo.trim().toLowerCase();
 
@@ -50,14 +54,22 @@ export function validateClientForm(
       "El nombre solo puede contener letras, espacios, apóstrofes y guiones.";
   }
 
-  if (!apellido) {
-    errors.apellido = "El apellido es obligatorio.";
-  } else if (apellido.length > 100) {
-    errors.apellido =
-      "El apellido no puede superar los 100 caracteres.";
-  } else if (!nameRegex.test(apellido)) {
-    errors.apellido =
-      "El apellido solo puede contener letras, espacios, apóstrofes y guiones.";
+  if (!apellidoPaterno) {
+    errors.apellido_paterno = "El apellido paterno es obligatorio.";
+  } else if (apellidoPaterno.length > 100) {
+    errors.apellido_paterno =
+      "El apellido paterno no puede superar los 100 caracteres.";
+  } else if (!nameRegex.test(apellidoPaterno)) {
+    errors.apellido_paterno =
+      "El apellido paterno solo puede contener letras, espacios, apóstrofes y guiones.";
+  }
+
+  if (apellidoMaterno.length > 100) {
+    errors.apellido_materno =
+      "El apellido materno no puede superar los 100 caracteres.";
+  } else if (apellidoMaterno && !nameRegex.test(apellidoMaterno)) {
+    errors.apellido_materno =
+      "El apellido materno solo puede contener letras, espacios, apóstrofes y guiones.";
   }
 
   if (telefono) {

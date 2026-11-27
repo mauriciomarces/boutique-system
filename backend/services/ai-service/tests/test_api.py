@@ -77,6 +77,18 @@ def test_train_predict_normal_and_anomalo(monkeypatch):
         "decision_path_conditions",
         lambda model, sample: [],
     )
+    monkeypatch.setattr(
+        main_module,
+        "decision_path_details",
+        lambda model, sample: {
+            "pasos": [],
+            "hoja": {
+                "nodo": 0,
+                "clasificacion": "NORMAL",
+                "muestras_entrenamiento": 1,
+            },
+        },
+    )
 
     normal_features = extract_features(
         NORMAL_SCENARIOS["normal_busy"](42, np.random.default_rng(42), 4)

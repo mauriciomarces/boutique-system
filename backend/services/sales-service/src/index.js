@@ -5,6 +5,11 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 const registrarRutasVentas = require('./ventas.routes');
 const { registerReportRoutes } = require('./reportes.routes');
+const {
+  CLIENT_SELECT,
+  SALE_CLIENT_SELECT,
+  normalizeClientData,
+} = require('./client-data');
 
 const app = express();
 
@@ -33,77 +38,6 @@ function serializarBigInt(data) {
       typeof value === 'bigint' ? value.toString() : value,
     ),
   );
-}
-
-function normalizeClientText(value, fieldName, maxLength = 100) {
-  if (typeof value !== 'string') {
-    throw new Error(`${fieldName} es obligatorio`);
-  }
-
-  const text = value.trim().replace(/\s+/g, ' ');
-
-  if (!text) {
-    throw new Error(`${fieldName} es obligatorio`);
-  }
-
-  if (text.length > maxLength) {
-    throw new Error(
-      `${fieldName} no puede superar los ${maxLength} caracteres`,
-    );
-  }
-
-  if (!/^[\p{L}]+(?:[ '-][\p{L}]+)*$/u.test(text)) {
-    throw new Error(
-      `${fieldName} solo puede contener letras, espacios, apóstrofes y guiones`,
-    );
-  }
-
-  return text;
-}
-
-function normalizeClientPhone(value) {
-  if (value === undefined || value === null || value === '') {
-    return null;
-  }
-
-  const phone = String(value).trim();
-
-  if (!/^\d{8,9}$/.test(phone)) {
-    throw new Error(
-      'El teléfono debe contener entre 8 y 9 dí­gitos',
-    );
-  }
-
-  return phone;
-}
-
-function normalizeClientEmail(value) {
-  if (value === undefined || value === null || value === '') {
-    return null;
-  }
-
-  const email = String(value).trim().toLowerCase();
-
-  if (email.length > 150) {
-    throw new Error(
-      'El correo no puede superar los 150 caracteres',
-    );
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new Error('El correo electrónico no tiene un formato válido');
-  }
-
-  return email;
-}
-
-function normalizeClientData(body) {
-  return {
-    nombre: normalizeClientText(body.nombre, 'El nombre'),
-    apellido: normalizeClientText(body.apellido, 'El apellido'),
-    telefono: normalizeClientPhone(body.telefono),
-    correo: normalizeClientEmail(body.correo),
-  };
 }
 
 app.get('/health', (req, res) => {
@@ -304,7 +238,7 @@ app.get('/ventas', async (req, res) => {
   try {
     const ventas = await prisma.ventas.findMany({
       include: {
-        clientes: true,
+        clientes: { select: SALE_CLIENT_SELECT },
         detalle_ventas: true,
         pagos: true,
       },
@@ -334,7 +268,12 @@ app.get('/clientes', async (req, res) => {
                 },
               },
               {
-                apellido: {
+                apellido_paterno: {
+                  contains: String(buscar),
+                },
+              },
+              {
+                apellido_materno: {
                   contains: String(buscar),
                 },
               },
@@ -354,6 +293,7 @@ app.get('/clientes', async (req, res) => {
       orderBy: {
         id: 'desc',
       },
+      select: CLIENT_SELECT,
     });
 
     res.json(serializarBigInt(clientes));
@@ -372,6 +312,7 @@ app.get('/clientes/:id', async (req, res) => {
 
     const cliente = await prisma.clientes.findUnique({
       where: { id },
+      select: CLIENT_SELECT,
     });
 
     if (!cliente) {
@@ -392,18 +333,28 @@ app.get('/clientes/:id', async (req, res) => {
 
 app.post('/clientes', async (req, res) => {
   try {
-    const { nombre, apellido, telefono, correo } = normalizeClientData(req.body);
+    const {
+      nombre,
+      apellido_paterno,
+      apellido_materno,
+      apellido,
+      telefono,
+      correo,
+    } = normalizeClientData(req.body);
 
     const cliente = await prisma.clientes.create({
       data: {
         nombre,
+        apellido_paterno,
+        apellido_materno,
         apellido,
         telefono,
         correo,
       },
+      select: CLIENT_SELECT,
     });
 
-    return res.status(201).json(cliente);
+    return res.status(201).json(serializarBigInt(cliente));
   } catch (error) {
     console.error('Error al crear cliente:', error);
 
@@ -427,7 +378,14 @@ app.put('/clientes/:id', async (req, res) => {
       });
     }
 
-    const { nombre, apellido, telefono, correo } = normalizeClientData(req.body);
+    const {
+      nombre,
+      apellido_paterno,
+      apellido_materno,
+      apellido,
+      telefono,
+      correo,
+    } = normalizeClientData(req.body);
 
     if (correo) {
       const existente = await prisma.clientes.findFirst({
@@ -450,10 +408,13 @@ app.put('/clientes/:id', async (req, res) => {
       where: { id },
       data: {
         nombre,
+        apellido_paterno,
+        apellido_materno,
         apellido,
         telefono,
         correo,
       },
+      select: CLIENT_SELECT,
     });
 
     return res.json(serializarBigInt(cliente));
@@ -491,9 +452,10 @@ app.patch('/clientes/:id/estado', async (req, res) => {
       data: {
         estado,
       },
+      select: CLIENT_SELECT,
     });
 
-    return res.json(cliente);
+    return res.json(serializarBigInt(cliente));
   } catch (error) {
     console.error('Error al cambiar estado del cliente:', error);
 

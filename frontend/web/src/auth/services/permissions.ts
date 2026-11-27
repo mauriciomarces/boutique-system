@@ -14,7 +14,8 @@ export type CurrentUserAccess = {
   user: {
     id: string;
     nombre: string;
-    apellido: string;
+    apellido_paterno: string;
+    apellido_materno: string | null;
     correo: string;
     telefono: string | null;
     estado: string;

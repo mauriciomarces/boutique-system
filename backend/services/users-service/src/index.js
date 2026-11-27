@@ -9,6 +9,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { publishSystemEvent } = require('../../../contracts/event-publisher');
 const { verifiedActorId } = require('../../../contracts/event-actor');
+const {
+  normalizePersonName,
+  normalizeOptionalPersonName,
+} = require('./person-names');
 const { getClientIpRateLimitKey } = require('./rate-limit');
 const {
   guardarPlantillaPermisos,
@@ -137,7 +141,8 @@ function buildUserPayload(usuario) {
   return serializeBigInt({
     id: usuario.id,
     nombre: usuario.nombre,
-    apellido: usuario.apellido,
+    apellido_paterno: usuario.apellido_paterno,
+    apellido_materno: usuario.apellido_materno ?? null,
     correo: usuario.correo,
     telefono: usuario.telefono,
     estado: usuario.estado,
@@ -243,33 +248,19 @@ async function ensureAdminUser(adminRole) {
 
   const now = new Date();
   const hashContrasena = await bcrypt.hash(adminPassword, 12);
+  const apellidoPaterno =
+    process.env.ADMIN_PATERNAL_LAST_NAME ||
+    process.env.ADMIN_LAST_NAME ||
+    'SposaBella';
+  const apellidoMaterno = process.env.ADMIN_MATERNAL_LAST_NAME || null;
   const usuario = await prisma.usuarios.upsert({
     where: { correo: adminEmail },
-    update: {
-      nombre: process.env.ADMIN_NAME || 'Administrador',
-      apellido: process.env.ADMIN_LAST_NAME || 'SposaBella',
-      estado: 'ACTIVO',
-      correo_verificado: true,
-      verificado_en: now,
-      credenciales: {
-        upsert: {
-          update: {
-            hash_contrasena: hashContrasena,
-            estado: 'ACTIVO',
-            actualizado_en: now,
-          },
-          create: {
-            hash_contrasena: hashContrasena,
-            estado: 'ACTIVO',
-            creado_en: now,
-            actualizado_en: now,
-          },
-        },
-      },
-    },
+    update: {},
     create: {
       nombre: process.env.ADMIN_NAME || 'Administrador',
-      apellido: process.env.ADMIN_LAST_NAME || 'SposaBella',
+      apellido_paterno: apellidoPaterno,
+      apellido_materno: apellidoMaterno,
+      apellido: [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' '),
       correo: adminEmail,
       estado: 'ACTIVO',
       correo_verificado: true,
@@ -353,16 +344,6 @@ function normalizeText(value) {
   const text = value.trim();
 
   return text.length > 0 ? text : null;
-}
-
-function normalizePersonName(value, fieldName) {
-  const text = normalizeText(value);
-
-  if (!text || !/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/.test(text)) {
-    throw new Error(`${fieldName} solo puede contener letras y espacios válidos`);
-  }
-
-  return text;
 }
 
 function normalizeAdminPhone(value) {
@@ -902,7 +883,8 @@ app.get(
       select: {
         id: true,
         nombre: true,
-        apellido: true,
+        apellido_paterno: true,
+        apellido_materno: true,
         correo: true,
         telefono: true,
         estado: true,
@@ -955,7 +937,8 @@ app.get(
       select: {
         id: true,
         nombre: true,
-        apellido: true,
+        apellido_paterno: true,
+        apellido_materno: true,
         correo: true,
         telefono: true,
         estado: true,
@@ -1707,9 +1690,17 @@ app.post(
   authorizePermission('USUARIOS_CREAR'),
   async (req, res) => {
   try {
-    const { nombre, apellido, correo, telefono, rol_id } = req.body;
+    const {
+      nombre,
+      apellido_paterno,
+      apellido_materno,
+      correo,
+      telefono,
+      rol_id,
+    } = req.body;
     const nombreNormalizado = normalizePersonName(nombre, 'El nombre');
-    const apellidoNormalizado = normalizePersonName(apellido, 'El apellido');
+    const apellidoPaterno = normalizePersonName(apellido_paterno, 'El apellido paterno');
+    const apellidoMaterno = normalizeOptionalPersonName(apellido_materno, 'El apellido materno');
     const correoNormalizado = normalizeEmail(correo);
     const telefonoNormalizado = normalizeAdminPhone(telefono);
 
@@ -1747,7 +1738,9 @@ app.post(
       const creado = await tx.usuarios.create({
         data: {
           nombre: nombreNormalizado,
-          apellido: apellidoNormalizado,
+          apellido_paterno: apellidoPaterno,
+          apellido_materno: apellidoMaterno,
+          apellido: [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' '),
           correo: correoNormalizado,
           telefono: telefonoNormalizado,
           estado: 'INACTIVO',
@@ -1759,7 +1752,8 @@ app.post(
         select: {
           id: true,
           nombre: true,
-          apellido: true,
+          apellido_paterno: true,
+          apellido_materno: true,
           correo: true,
           telefono: true,
           estado: true,
@@ -1824,13 +1818,15 @@ app.put(
 
     const {
       nombre,
-      apellido,
+      apellido_paterno,
+      apellido_materno,
       correo,
       telefono,
     } = req.body;
 
     const nombreNormalizado = normalizePersonName(nombre, 'El nombre');
-    const apellidoNormalizado = normalizePersonName(apellido, 'El apellido');
+    const apellidoPaterno = normalizePersonName(apellido_paterno, 'El apellido paterno');
+    const apellidoMaterno = normalizeOptionalPersonName(apellido_materno, 'El apellido materno');
     const correoNormalizado = normalizeEmail(correo);
     const telefonoNormalizado = normalizeAdminPhone(telefono);
 
@@ -1844,7 +1840,9 @@ app.put(
       },
       data: {
         nombre: nombreNormalizado,
-        apellido: apellidoNormalizado,
+        apellido_paterno: apellidoPaterno,
+        apellido_materno: apellidoMaterno,
+        apellido: [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' '),
         correo: correoNormalizado,
         telefono: telefonoNormalizado,
         actualizado_en: new Date(),
@@ -1852,7 +1850,8 @@ app.put(
       select: {
         id: true,
         nombre: true,
-        apellido: true,
+        apellido_paterno: true,
+        apellido_materno: true,
         correo: true,
         telefono: true,
         estado: true,
@@ -1960,7 +1959,8 @@ app.patch(
       select: {
         id: true,
         nombre: true,
-        apellido: true,
+        apellido_paterno: true,
+        apellido_materno: true,
         correo: true,
         telefono: true,
         estado: true,
@@ -2098,17 +2098,20 @@ app.post('/auth/register', authRateLimit, async (req, res) => {
   try {
     const {
       nombre,
-      apellido,
+      apellido_paterno,
+      apellido_materno,
       correo,
       telefono,
       contrasena,
     } = req.body;
 
     let nombreNormalizado;
-    let apellidoNormalizado;
+    let apellidoPaterno;
+    let apellidoMaterno;
     try {
       nombreNormalizado = normalizePersonName(nombre, 'El nombre');
-      apellidoNormalizado = normalizePersonName(apellido, 'El apellido');
+      apellidoPaterno = normalizePersonName(apellido_paterno, 'El apellido paterno');
+      apellidoMaterno = normalizeOptionalPersonName(apellido_materno, 'El apellido materno');
     } catch (error) {
       return res.status(400).json({ error: error.message });
     }
@@ -2126,9 +2129,9 @@ app.post('/auth/register', authRateLimit, async (req, res) => {
       });
     }
 
-    if (!apellidoNormalizado) {
+    if (!apellidoPaterno) {
       return res.status(400).json({
-        error: 'El apellido es obligatorio',
+        error: 'El apellido paterno es obligatorio',
       });
     }
 
@@ -2186,7 +2189,9 @@ app.post('/auth/register', authRateLimit, async (req, res) => {
           await tx.usuarios.create({
             data: {
               nombre: nombreNormalizado,
-              apellido: apellidoNormalizado,
+              apellido_paterno: apellidoPaterno,
+              apellido_materno: apellidoMaterno,
+              apellido: [apellidoPaterno, apellidoMaterno].filter(Boolean).join(' '),
               correo: correoNormalizado,
               telefono: telefonoNormalizado,
               estado: 'ACTIVO',
@@ -2208,7 +2213,8 @@ app.post('/auth/register', authRateLimit, async (req, res) => {
             select: {
               id: true,
               nombre: true,
-              apellido: true,
+              apellido_paterno: true,
+              apellido_materno: true,
               correo: true,
               telefono: true,
               estado: true,
@@ -3075,7 +3081,8 @@ app.post('/auth/login', loginRateLimit, async (req, res) => {
     const user = buildUserPayload({
       id: usuario.id,
       nombre: usuario.nombre,
-      apellido: usuario.apellido,
+      apellido_paterno: usuario.apellido_paterno,
+      apellido_materno: usuario.apellido_materno,
       correo: usuario.correo,
       telefono: usuario.telefono,
       estado: usuario.estado,
@@ -3292,7 +3299,8 @@ app.get(
           select: {
             id: true,
             nombre: true,
-            apellido: true,
+            apellido_paterno: true,
+            apellido_materno: true,
             correo: true,
             telefono: true,
             estado: true,

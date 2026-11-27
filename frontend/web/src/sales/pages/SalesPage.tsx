@@ -6,8 +6,11 @@ import {
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 
-import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import AdministrationLayout from "../../administration/components/AdministrationLayout";
 import LogoutButton from "../../auth/components/LogoutButton";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
 
 import type {
   Product,
@@ -41,6 +44,7 @@ import type {
   SaleCreateDetail,
 } from "../types/sales.types";
 import usePermissions from "../../auth/hooks/usePermissions";
+import { matchesLocalDateRange } from "../../utils/dateFilters";
 
 
 interface CartItem extends SaleCreateDetail {
@@ -129,6 +133,15 @@ function SalesPage() {
     useState("");
 
   const [search, setSearch] = useState("");
+  const [saleStatusFilter, setSaleStatusFilter] = useState<
+    "TODOS" | "PENDIENTE" | "CONFIRMADA" | "ANULADA"
+  >("TODOS");
+  const [salesFrom, setSalesFrom] = useState("");
+  const [salesTo, setSalesTo] = useState("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("TODOS");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("TODOS");
+  const [paymentsFrom, setPaymentsFrom] = useState("");
+  const [paymentsTo, setPaymentsTo] = useState("");
 
   const [activeTab, setActiveTab] = useState<
     "ventas" | "pagos"
@@ -220,13 +233,20 @@ function SalesPage() {
       .trim()
       .toLowerCase();
 
-    if (!term) {
-      return sales;
-    }
-
     return sales.filter((sale) => {
+      if (saleStatusFilter !== "TODOS" && sale.estado !== saleStatusFilter) {
+        return false;
+      }
+      if (!matchesLocalDateRange(sale.fecha_venta, salesFrom, salesTo)) {
+        return false;
+      }
+      if (!term) return true;
       const clientName = sale.clientes
-        ? `${sale.clientes.nombre} ${sale.clientes.apellido}`
+        ? [
+            sale.clientes.nombre,
+            sale.clientes.apellido_paterno,
+            sale.clientes.apellido_materno,
+          ].filter(Boolean).join(" ")
         : "";
 
       return (
@@ -237,7 +257,25 @@ function SalesPage() {
           .includes(term)
       );
     });
-  }, [sales, search]);
+  }, [sales, saleStatusFilter, salesFrom, salesTo, search]);
+  const visiblePayments = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return payments.filter((payment) => {
+      const matchesSearch = !term ||
+        payment.id.includes(term) ||
+        payment.venta_id.includes(term) ||
+        payment.metodo_pago.toLowerCase().includes(term) ||
+        payment.estado.toLowerCase().includes(term);
+      return (
+        matchesSearch &&
+        (paymentStatusFilter === "TODOS" || payment.estado === paymentStatusFilter) &&
+        (paymentMethodFilter === "TODOS" || payment.metodo_pago === paymentMethodFilter) &&
+        matchesLocalDateRange(payment.fecha_pago || payment.creado_en, paymentsFrom, paymentsTo)
+      );
+    });
+  }, [payments, search, paymentStatusFilter, paymentMethodFilter, paymentsFrom, paymentsTo]);
+  const salesPagination = usePagination(visibleSales);
+  const paymentsPagination = usePagination(visiblePayments);
 
   const openCreate = () => {
     setError("");
@@ -643,7 +681,10 @@ function SalesPage() {
   };
 
   return (
-    <div className="theme-bg min-h-screen">
+    <AdministrationLayout
+      sidebarOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    >
       <header className="border-b theme-border bg-[var(--nav-bg)]">
         <div className="mx-auto flex h-[76px] max-w-[1500px] items-center justify-between px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
@@ -697,14 +738,7 @@ function SalesPage() {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1500px] gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <AdministrationSidebar
-          sidebarOpen={sidebarOpen}
-          onClose={() =>
-            setSidebarOpen(false)
-          }
-        />
-
+      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
         <main className="min-w-0 flex-1">
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
@@ -720,6 +754,9 @@ function SalesPage() {
                 Registra ventas, administra sus
                 pagos y controla las transacciones
                 realizadas.
+              </p>
+              <p className="mt-1 text-sm theme-text-muted">
+                Una venta es la operación comercial; cada transacción corresponde a un pago asociado a una venta.
               </p>
             </div>
 
@@ -797,7 +834,11 @@ function SalesPage() {
               <input
                 value={search}
                 onChange={(event) =>
-                  setSearch(event.target.value)
+                  {
+                    setSearch(event.target.value);
+                    salesPagination.setPage(1);
+                    paymentsPagination.setPage(1);
+                  }
                 }
                 placeholder={
                   activeTab === "ventas"
@@ -806,6 +847,107 @@ function SalesPage() {
                 }
                 className="w-full rounded-xl border theme-border bg-[var(--bg-secondary)] px-4 py-2.5 text-sm theme-text lg:w-80"
               />
+              {activeTab === "ventas" && (
+                <select
+                  value={saleStatusFilter}
+                  onChange={(event) => {
+                    setSaleStatusFilter(event.target.value as typeof saleStatusFilter);
+                    salesPagination.setPage(1);
+                  }}
+                  aria-label="Filtrar ventas por estado"
+                  className="rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2.5 text-sm theme-text"
+                >
+                  <option value="TODOS">Todos los estados</option>
+                  <option value="PENDIENTE">Pendientes</option>
+                  <option value="CONFIRMADA">Confirmadas</option>
+                  <option value="ANULADA">Anuladas</option>
+                </select>
+              )}
+              {activeTab === "ventas" ? (
+                <>
+                  <label className="text-sm theme-text-soft">
+                    Desde
+                    <input
+                      type="date"
+                      value={salesFrom}
+                      onChange={(event) => {
+                        setSalesFrom(event.target.value);
+                        salesPagination.setPage(1);
+                      }}
+                      className="mt-1 rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2 text-sm theme-text"
+                    />
+                  </label>
+                  <label className="text-sm theme-text-soft">
+                    Hasta
+                    <input
+                      type="date"
+                      value={salesTo}
+                      onChange={(event) => {
+                        setSalesTo(event.target.value);
+                        salesPagination.setPage(1);
+                      }}
+                      className="mt-1 rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2 text-sm theme-text"
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <select
+                    value={paymentStatusFilter}
+                    onChange={(event) => {
+                      setPaymentStatusFilter(event.target.value);
+                      paymentsPagination.setPage(1);
+                    }}
+                    aria-label="Filtrar transacciones por estado"
+                    className="rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2.5 text-sm theme-text"
+                  >
+                    <option value="TODOS">Todos los estados</option>
+                    <option value="PENDIENTE">Pendientes</option>
+                    <option value="PAGADO">Pagados</option>
+                    <option value="ANULADO">Anulados</option>
+                  </select>
+                  <select
+                    value={paymentMethodFilter}
+                    onChange={(event) => {
+                      setPaymentMethodFilter(event.target.value);
+                      paymentsPagination.setPage(1);
+                    }}
+                    aria-label="Filtrar transacciones por método de pago"
+                    className="rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2.5 text-sm theme-text"
+                  >
+                    <option value="TODOS">Todos los métodos</option>
+                    {[...new Set(payments.map((payment) => payment.metodo_pago))]
+                      .sort()
+                      .map((method) => (
+                        <option key={method} value={method}>{method}</option>
+                      ))}
+                  </select>
+                  <label className="text-sm theme-text-soft">
+                    Desde
+                    <input
+                      type="date"
+                      value={paymentsFrom}
+                      onChange={(event) => {
+                        setPaymentsFrom(event.target.value);
+                        paymentsPagination.setPage(1);
+                      }}
+                      className="mt-1 rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2 text-sm theme-text"
+                    />
+                  </label>
+                  <label className="text-sm theme-text-soft">
+                    Hasta
+                    <input
+                      type="date"
+                      value={paymentsTo}
+                      onChange={(event) => {
+                        setPaymentsTo(event.target.value);
+                        paymentsPagination.setPage(1);
+                      }}
+                      className="mt-1 rounded-xl border theme-border bg-[var(--bg-secondary)] px-3 py-2 text-sm theme-text"
+                    />
+                  </label>
+                </>
+              )}
             </div>
 
             {loading ? (
@@ -825,6 +967,7 @@ function SalesPage() {
                   </p>
                 </div>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-[var(--bg-secondary)] theme-text-soft">
@@ -856,7 +999,7 @@ function SalesPage() {
                     </thead>
 
                     <tbody>
-                      {visibleSales.map(
+                      {salesPagination.pageItems.map(
                         (sale) => (
                           <tr
                             key={sale.id}
@@ -876,7 +1019,11 @@ function SalesPage() {
 
                             <td className="px-5 py-4 theme-text-soft">
                               {sale.clientes
-                                ? `${sale.clientes.nombre} ${sale.clientes.apellido}`
+                                ? [
+                                    sale.clientes.nombre,
+                                    sale.clientes.apellido_paterno,
+                                    sale.clientes.apellido_materno,
+                                  ].filter(Boolean).join(" ")
                                 : "Venta sin cliente"}
                             </td>
 
@@ -974,35 +1121,25 @@ function SalesPage() {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls
+                  page={salesPagination.page}
+                  pageCount={salesPagination.pageCount}
+                  pageSize={salesPagination.pageSize}
+                  total={salesPagination.total}
+                  onPageChange={salesPagination.setPage}
+                  onPageSizeChange={salesPagination.setPageSize}
+                />
+                </>
               )
             ) : (
-              payments.filter((payment) => {
-                const term =
-                  search.trim().toLowerCase();
-
-                if (!term) {
-                  return true;
-                }
-
-                return (
-                  payment.id.includes(term) ||
-                  payment.venta_id.includes(
-                    term,
-                  ) ||
-                  payment.metodo_pago
-                    .toLowerCase()
-                    .includes(term) ||
-                  payment.estado
-                    .toLowerCase()
-                    .includes(term)
-                );
-              }).length === 0 ? (
+              visiblePayments.length === 0 ? (
                 <div className="p-10 text-center">
                   <p className="font-medium theme-text">
                     No se encontraron transacciones
                   </p>
                 </div>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-[var(--bg-secondary)] theme-text-soft">
@@ -1034,37 +1171,7 @@ function SalesPage() {
                     </thead>
 
                     <tbody>
-                      {payments
-                        .filter((payment) => {
-                          const term =
-                            search
-                              .trim()
-                              .toLowerCase();
-
-                          if (!term) {
-                            return true;
-                          }
-
-                          return (
-                            payment.id.includes(
-                              term,
-                            ) ||
-                            payment.venta_id.includes(
-                              term,
-                            ) ||
-                            payment.metodo_pago
-                              .toLowerCase()
-                              .includes(
-                                term,
-                              ) ||
-                            payment.estado
-                              .toLowerCase()
-                              .includes(
-                                term,
-                              )
-                          );
-                        })
-                        .map(
+                      {paymentsPagination.pageItems.map(
                           (payment) => (
                             <tr
                               key={payment.id}
@@ -1122,6 +1229,15 @@ function SalesPage() {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls
+                  page={paymentsPagination.page}
+                  pageCount={paymentsPagination.pageCount}
+                  pageSize={paymentsPagination.pageSize}
+                  total={paymentsPagination.total}
+                  onPageChange={paymentsPagination.setPage}
+                  onPageSizeChange={paymentsPagination.setPageSize}
+                />
+                </>
               )
             )}
           </section>
@@ -1186,7 +1302,9 @@ function SalesPage() {
                       value={client.id}
                     >
                       {client.nombre}{" "}
-                      {client.apellido}
+                      {[client.apellido_paterno, client.apellido_materno]
+                        .filter(Boolean)
+                        .join(" ")}
                     </option>
                   ))}
                 </select>
@@ -1617,7 +1735,11 @@ function SalesPage() {
 
                   <p className="mt-1 font-medium theme-text">
                     {selectedSale.clientes
-                      ? `${selectedSale.clientes.nombre} ${selectedSale.clientes.apellido}`
+                      ? [
+                          selectedSale.clientes.nombre,
+                          selectedSale.clientes.apellido_paterno,
+                          selectedSale.clientes.apellido_materno,
+                        ].filter(Boolean).join(" ")
                       : "Sin cliente"}
                   </p>
                 </div>
@@ -1766,7 +1888,7 @@ function SalesPage() {
             </div>
           </div>
         )}
-    </div>
+    </AdministrationLayout>
   );
 }
 

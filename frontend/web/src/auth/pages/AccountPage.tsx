@@ -117,7 +117,9 @@ function AccountPage() {
                 Nombre
               </p>
               <p className="mt-2 font-medium theme-text">
-                {user.nombre} {user.apellido}
+                {[user.nombre, user.apellido_paterno, user.apellido_materno]
+                  .filter(Boolean)
+                  .join(" ")}
               </p>
             </div>
 

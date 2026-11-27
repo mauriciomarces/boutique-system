@@ -803,6 +803,27 @@ export class AppController {
         nivel_riesgo?: string;
         model_version?: string;
         factores?: string[];
+        recorrido_arbol?: {
+          pasos?: Array<{
+            variable: string;
+            valor: number;
+            umbral: number;
+            condicion: string;
+            condicion_satisfecha: boolean;
+            rama: string;
+          }>;
+          hoja?: {
+            clasificacion: string;
+            muestras_entrenamiento: number;
+          };
+        };
+      };
+      correlation?: {
+        rules?: Record<string, {
+          description: string;
+          fired: boolean;
+          value: number;
+        }>;
       };
     };
 
@@ -818,6 +839,8 @@ export class AppController {
           nivel_riesgo: analysis.classification.nivel_riesgo,
           model_version: analysis.classification.model_version,
           factores: analysis.classification.factores,
+          recorrido_arbol: analysis.classification.recorrido_arbol,
+          reglas_correlacion: analysis.correlation?.rules,
           event_ids: analysis.event_ids,
         },
         headers,

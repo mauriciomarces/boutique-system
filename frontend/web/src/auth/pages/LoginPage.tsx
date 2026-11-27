@@ -56,11 +56,7 @@ function LoginPage() {
       );
       notifyAuthSessionChanged();
 
-      const hasAdminRole = response.user.roles?.some(
-        (role) => role.nombre.toUpperCase() === "ADMIN",
-      );
-
-      navigate(hasAdminRole ? "/administracion/usuarios" : "/panel");
+      navigate("/panel");
     } catch (err) {
       setError(
         err instanceof Error

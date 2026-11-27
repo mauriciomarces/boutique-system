@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import AdministrationLayout from "../../administration/components/AdministrationLayout";
 import LogoutButton from "../../auth/components/LogoutButton";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
 import {
   getDailyReport,
   getIncomeReport,
@@ -54,12 +57,18 @@ function reportTitle(type: ReportType) {
 
 function ReportsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [type, setType] = useState<ReportType>("diario");
+  const [type, setType] = useState<ReportType>("ventas");
   const [selectedDate, setSelectedDate] = useState(() => localDate(new Date()));
   const [from, setFrom] = useState(() => localDate(new Date()));
   const [to, setTo] = useState(() => localDate(new Date()));
   const [status, setStatus] = useState("");
   const [clientId, setClientId] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [saleId, setSaleId] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [requestState, setRequestState] = useState<{
     key: string;
@@ -73,6 +82,12 @@ function ReportsPage() {
     to,
     status,
     clientId,
+    clientName,
+    saleId,
+    minAmount,
+    maxAmount,
+    paymentStatus,
+    paymentMethod,
     refreshKey,
   ]);
   const currentRequest =
@@ -80,8 +95,20 @@ function ReportsPage() {
   const report = currentRequest?.report ?? null;
   const error = currentRequest?.error ?? "";
   const loading = type !== "egresos" && currentRequest === null;
+  const operationsPagination = usePagination(report?.operaciones ?? []);
+  const setOperationsPage = operationsPagination.setPage;
+  const filterSummary = [
+    `estado ${status || "Todos"}`,
+    `cliente ID ${clientId || "Todos"}`,
+    `cliente ${clientName || "Todos"}`,
+    `venta ID ${saleId || "Todas"}`,
+    `importe ${minAmount || "0"}–${maxAmount || "sin máximo"} Bs`,
+    `estado de pago ${paymentStatus || "Todos"}`,
+    `método ${paymentMethod || "Todos"}`,
+  ].join("; ");
 
   useEffect(() => {
+    setOperationsPage(1);
     if (type === "egresos") return;
 
     let cancelled = false;
@@ -94,7 +121,16 @@ function ReportsPage() {
               Number(selectedDate.slice(0, 4)),
             )
           : type === "ventas"
-            ? getSalesReport(from, to, status, clientId)
+            ? getSalesReport(from, to, {
+                status,
+                clientId,
+                clientName,
+                saleId,
+                minAmount,
+                maxAmount,
+                paymentStatus,
+                paymentMethod,
+              })
             : getIncomeReport(from, to);
 
     request
@@ -116,7 +152,23 @@ function ReportsPage() {
     return () => {
       cancelled = true;
     };
-  }, [type, selectedDate, from, to, status, clientId, refreshKey, queryKey]);
+  }, [
+    type,
+    selectedDate,
+    from,
+    to,
+    status,
+    clientId,
+    clientName,
+    saleId,
+    minAmount,
+    maxAmount,
+    paymentStatus,
+    paymentMethod,
+    refreshKey,
+    queryKey,
+    setOperationsPage,
+  ]);
 
   const periodLabel = useMemo(() => {
     if (type === "diario") return selectedDate;
@@ -135,6 +187,7 @@ function ReportsPage() {
         "Importe de la venta",
         "Estado",
         "Pagos recibidos",
+        "Métodos de pago",
       ],
       ...report.operaciones.map((operation) => [
         operation.id,
@@ -144,6 +197,7 @@ function ReportsPage() {
         operation.importe.toFixed(2),
         operation.estado,
         operation.pagosRecibidos.toFixed(2),
+        operation.metodosPago.join("; "),
       ]),
     ];
     const summaryRows =
@@ -165,7 +219,7 @@ function ReportsPage() {
       [`Reporte: ${reportTitle(type)}`],
       [`Período consultado: ${periodLabel}`],
       ...(type === "ventas"
-        ? [[`Filtros: estado ${status || "Todos"}; cliente ${clientId || "Todos"}`]]
+        ? [[`Filtros: ${filterSummary}`]]
         : []),
       [],
       ["Resumen"],
@@ -231,12 +285,17 @@ function ReportsPage() {
     type === "mensual" ? report : null;
 
   return (
-    <div className="theme-bg min-h-screen lg:flex">
+    <AdministrationLayout
+      sidebarOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    >
       <style>{`
         @page { size: landscape; margin: 14mm; }
         @media print {
           body { background: white !important; color: black !important; }
-          aside, .report-navigation, .report-actions, .report-filters { display: none !important; }
+          aside, .report-navigation, .report-actions, .report-filters, .pagination-controls { display: none !important; }
+          .report-operations-screen { display: none !important; }
+          .report-operations-print { display: block !important; }
           .report-print { display: block !important; color: black !important; }
           .report-print table { width: 100%; border-collapse: collapse; }
           .report-print th, .report-print td { border: 1px solid #bbb; padding: 6px; font-size: 10px; }
@@ -244,10 +303,6 @@ function ReportsPage() {
           .report-print tr { break-inside: avoid; }
         }
       `}</style>
-      <AdministrationSidebar
-        sidebarOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
       <main className="min-w-0 flex-1 p-6 lg:p-10">
         <div className="report-navigation flex items-center justify-between gap-4">
           <button
@@ -332,7 +387,7 @@ function ReportsPage() {
                 {type === "ventas" && (
                   <>
                     <label className="text-sm theme-text">
-                      Estado
+                      Estado de venta
                       <select
                         value={status}
                         onChange={(event) => setStatus(event.target.value)}
@@ -345,11 +400,77 @@ function ReportsPage() {
                       </select>
                     </label>
                     <label className="text-sm theme-text">
-                      Identificador de cliente
+                      ID del cliente
                       <input
                         inputMode="numeric"
                         value={clientId}
-                        onChange={(event) => setClientId(event.target.value)}
+                        onChange={(event) => setClientId(event.target.value.replace(/\D/g, ""))}
+                        placeholder="Todos"
+                        className="mt-2 w-full rounded-xl border theme-border bg-transparent px-3 py-2"
+                      />
+                    </label>
+                    <label className="text-sm theme-text">
+                      Nombre o apellido del cliente
+                      <input
+                        value={clientName}
+                        onChange={(event) => setClientName(event.target.value)}
+                        maxLength={100}
+                        placeholder="Buscar por nombre"
+                        className="mt-2 w-full rounded-xl border theme-border bg-transparent px-3 py-2"
+                      />
+                    </label>
+                    <label className="text-sm theme-text">
+                      ID de venta
+                      <input
+                        inputMode="numeric"
+                        value={saleId}
+                        onChange={(event) => setSaleId(event.target.value.replace(/\D/g, ""))}
+                        placeholder="Todas"
+                        className="mt-2 w-full rounded-xl border theme-border bg-transparent px-3 py-2"
+                      />
+                    </label>
+                    <label className="text-sm theme-text">
+                      Importe mínimo (Bs)
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={minAmount}
+                        onChange={(event) => setMinAmount(event.target.value)}
+                        className="mt-2 w-full rounded-xl border theme-border bg-transparent px-3 py-2"
+                      />
+                    </label>
+                    <label className="text-sm theme-text">
+                      Importe máximo (Bs)
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={maxAmount}
+                        onChange={(event) => setMaxAmount(event.target.value)}
+                        className="mt-2 w-full rounded-xl border theme-border bg-transparent px-3 py-2"
+                      />
+                    </label>
+                    <label className="text-sm theme-text">
+                      Estado del pago
+                      <select
+                        value={paymentStatus}
+                        onChange={(event) => setPaymentStatus(event.target.value)}
+                        className="mt-2 w-full rounded-xl border theme-border bg-transparent px-3 py-2"
+                      >
+                        <option value="">Todos</option>
+                        <option value="PAGADO">Pagado</option>
+                        <option value="PENDIENTE">Pendiente</option>
+                        <option value="ANULADO">Anulado</option>
+                      </select>
+                    </label>
+                    <label className="text-sm theme-text">
+                      Método de pago
+                      <input
+                        value={paymentMethod}
+                        onChange={(event) => setPaymentMethod(event.target.value)}
+                        maxLength={50}
+                        placeholder="Ej. EFECTIVO"
                         className="mt-2 w-full rounded-xl border theme-border bg-transparent px-3 py-2"
                       />
                     </label>
@@ -415,7 +536,7 @@ function ReportsPage() {
                 </p>
                 {type === "ventas" && (
                   <p className="text-sm theme-text-soft">
-                    Filtros: estado {status || "Todos"}; cliente {clientId || "Todos"}
+                    Filtros: {filterSummary}
                   </p>
                 )}
                 <p className="text-xs theme-text-muted">
@@ -518,7 +639,7 @@ function ReportsPage() {
 
             <div className="mt-6">
               <h3 className="font-semibold theme-text">Operaciones</h3>
-              <div className="mt-3 overflow-x-auto">
+              <div className="report-operations-screen mt-3 overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b theme-border theme-text-muted">
@@ -529,6 +650,44 @@ function ReportsPage() {
                       <th className="px-3 py-2">Importe</th>
                       <th className="px-3 py-2">Estado</th>
                       <th className="px-3 py-2">Pagos recibidos</th>
+                      <th className="px-3 py-2">Método(s) de pago</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {operationsPagination.pageItems.map((operation) => (
+                      <tr key={operation.id} className="border-b theme-border theme-text">
+                        <td className="px-3 py-2">{operation.id}</td>
+                        <td className="px-3 py-2">{new Date(operation.fecha).toLocaleString("es-BO")}</td>
+                        <td className="px-3 py-2">{operation.cliente || "Sin cliente"}</td>
+                        <td className="px-3 py-2">{operation.responsable || "No disponible"}</td>
+                        <td className="px-3 py-2">{formatCurrency(operation.importe)}</td>
+                        <td className="px-3 py-2">{operation.estado}</td>
+                        <td className="px-3 py-2">{formatCurrency(operation.pagosRecibidos)}</td>
+                        <td className="px-3 py-2">{operation.metodosPago.join(", ") || "Sin pagos"}</td>
+                      </tr>
+                    ))}
+                    {report.operaciones.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-6 text-center theme-text-soft">
+                          No hay ventas para los filtros seleccionados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="report-operations-print mt-3 overflow-x-auto" style={{ display: "none" }}>
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b theme-border theme-text-muted">
+                      <th className="px-3 py-2">Número</th>
+                      <th className="px-3 py-2">Fecha</th>
+                      <th className="px-3 py-2">Cliente</th>
+                      <th className="px-3 py-2">Responsable</th>
+                      <th className="px-3 py-2">Importe</th>
+                      <th className="px-3 py-2">Estado</th>
+                      <th className="px-3 py-2">Pagos recibidos</th>
+                      <th className="px-3 py-2">Método(s) de pago</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -541,18 +700,20 @@ function ReportsPage() {
                         <td className="px-3 py-2">{formatCurrency(operation.importe)}</td>
                         <td className="px-3 py-2">{operation.estado}</td>
                         <td className="px-3 py-2">{formatCurrency(operation.pagosRecibidos)}</td>
+                        <td className="px-3 py-2">{operation.metodosPago.join(", ") || "Sin pagos"}</td>
                       </tr>
                     ))}
-                    {report.operaciones.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-3 py-6 text-center theme-text-soft">
-                          No hay ventas para los filtros seleccionados.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
+              <PaginationControls
+                page={operationsPagination.page}
+                pageCount={operationsPagination.pageCount}
+                pageSize={operationsPagination.pageSize}
+                total={operationsPagination.total}
+                onPageChange={operationsPagination.setPage}
+                onPageSizeChange={operationsPagination.setPageSize}
+              />
             </div>
             {dailySummary && (
               <p className="mt-4 text-xs theme-text-muted">
@@ -562,7 +723,7 @@ function ReportsPage() {
           </section>
         )}
       </main>
-    </div>
+    </AdministrationLayout>
   );
 }
 

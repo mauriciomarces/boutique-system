@@ -229,6 +229,22 @@ test("la clasificación se enlaza con eventos, características y se persiste", 
         input_id: JSON.parse(options.body).input_id,
         factores: [],
         camino_arbol: ["event_count_10m <= 2.5"],
+        recorrido_arbol: {
+          pasos: [{
+            numero: 1,
+            variable: "event_count_10m",
+            valor: 1,
+            umbral: 2.5,
+            condicion: "event_count_10m <= 2.500",
+            condicion_satisfecha: true,
+            rama: "izquierda",
+          }],
+          hoja: {
+            nodo: 1,
+            clasificacion: "NORMAL",
+            muestras_entrenamiento: 12,
+          },
+        },
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
     return originalFetch(url, options);
@@ -240,6 +256,8 @@ test("la clasificación se enlaza con eventos, características y se persiste", 
   assert.equal(result.data.event_ids[0], "evt-trace");
   assert.equal(result.data.classification.model_version, "v1");
   assert.equal(result.data.classification.input_id, result.data.analysis_id);
+  assert.equal(result.data.classification.recorrido_arbol.pasos[0].valor, 1);
+  assert.equal(result.data.classification.recorrido_arbol.pasos[0].valor, 1);
   assert.ok(result.data.correlation.features.event_count_10m);
   const history = await request(port, "GET", "/analyses");
   assert.equal(history.data.analyses[0].analysis_id, result.data.analysis_id);

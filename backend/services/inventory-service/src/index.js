@@ -6,6 +6,7 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
 const { publishSystemEvent } = require('../../../contracts/event-publisher');
 const { verifiedActorId } = require('../../../contracts/event-actor');
+const { parseMovementLimit } = require('./pagination');
 
 const app = express();
 const port = Number(process.env.PORT || 4004);
@@ -848,6 +849,7 @@ app.get('/movimientos', async (req, res) => {
     const { variante_producto_id, tipo_movimiento } = req.query;
 
     const where = {};
+    const take = parseMovementLimit(req.query.limit);
 
     if (variante_producto_id) {
       where.variante_producto_id = parseId(
@@ -865,6 +867,7 @@ app.get('/movimientos', async (req, res) => {
       orderBy: {
         id: 'desc',
       },
+      ...(take ? { take } : {}),
     });
 
     return res.json(serializar(movimientos));

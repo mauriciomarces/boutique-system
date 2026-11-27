@@ -1,7 +1,8 @@
 ﻿export interface AuthUser {
   id: number;
   nombre: string;
-  apellido: string;
+  apellido_paterno: string;
+  apellido_materno: string | null;
   correo: string;
   telefono: string | null;
   estado: string;
@@ -27,7 +28,8 @@ export interface LoginResponse {
 
 export interface RegisterRequest {
   nombre: string;
-  apellido: string;
+  apellido_paterno: string;
+  apellido_materno?: string | null;
   correo: string;
   telefono?: string;
   contrasena: string;

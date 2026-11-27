@@ -11,7 +11,8 @@ function RegisterPage() {
   const navigate = useNavigate();
 
   const [nombre, setNombre] = useState("");
-  const [apellido, setApellido] = useState("");
+  const [apellidoPaterno, setApellidoPaterno] = useState("");
+  const [apellidoMaterno, setApellidoMaterno] = useState("");
   const [correo, setCorreo] = useState("");
   const [telefono, setTelefono] = useState("");
   const [contrasena, setContrasena] = useState("");
@@ -35,7 +36,7 @@ function RegisterPage() {
 
     if (
       !nombre.trim() ||
-      !apellido.trim() ||
+      !apellidoPaterno.trim() ||
       !correo.trim() ||
       !contrasena
     ) {
@@ -48,8 +49,21 @@ function RegisterPage() {
       return;
     }
 
-    if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/.test(apellido.trim())) {
-      setError("El apellido solo puede contener letras y espacios válidos.");
+    if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/.test(apellidoPaterno.trim())) {
+      setError("El apellido paterno solo puede contener letras y espacios válidos.");
+      return;
+    }
+    if (apellidoPaterno.trim().length > 100) {
+      setError("El apellido paterno no puede superar los 100 caracteres.");
+      return;
+    }
+
+    if (apellidoMaterno.trim() && !/^[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*$/.test(apellidoMaterno.trim())) {
+      setError("El apellido materno solo puede contener letras y espacios válidos.");
+      return;
+    }
+    if (apellidoMaterno.trim().length > 100) {
+      setError("El apellido materno no puede superar los 100 caracteres.");
       return;
     }
 
@@ -73,7 +87,8 @@ function RegisterPage() {
 
       const response = await register({
         nombre: nombre.trim(),
-        apellido: apellido.trim(),
+        apellido_paterno: apellidoPaterno.trim(),
+        apellido_materno: apellidoMaterno.trim() || null,
         correo: correo.trim(),
         telefono: telefono.trim() || undefined,
         contrasena,
@@ -140,14 +155,27 @@ function RegisterPage() {
           />
 
           <AuthInput
-            id="apellido"
-            name="apellido"
-            label="Apellido"
-            placeholder="Tu apellido"
+            id="apellido-paterno"
+            name="apellido_paterno"
+            label="Apellido paterno"
+            placeholder="Tu apellido paterno"
             autoComplete="family-name"
-            value={apellido}
-            onChange={(event) => setApellido(event.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü' -]/g, ""))}
+            value={apellidoPaterno}
+            onChange={(event) => setApellidoPaterno(event.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü' -]/g, ""))}
             disabled={loading}
+            maxLength={100}
+            pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*"
+          />
+          <AuthInput
+            id="apellido-materno"
+            name="apellido_materno"
+            label="Apellido materno (opcional)"
+            placeholder="Tu apellido materno"
+            autoComplete="family-name"
+            value={apellidoMaterno}
+            onChange={(event) => setApellidoMaterno(event.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü' -]/g, ""))}
+            disabled={loading}
+            maxLength={100}
             pattern="[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:[ '-][A-Za-zÁÉÍÓÚáéíóúÑñÜü]+)*"
           />
         </div>

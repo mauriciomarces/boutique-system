@@ -296,3 +296,48 @@ def decision_path_conditions(
         else:
             conditions.append(f"{name} > {threshold:.3f}")
     return conditions
+
+
+def decision_path_details(
+    model: DecisionTreeClassifier,
+    sample: pd.DataFrame | np.ndarray,
+) -> dict[str, Any]:
+    tree = model.tree_
+    feature_names = getattr(model, "feature_names_in_", MODEL_FEATURE_COLUMNS)
+    sample_values = sample.to_numpy() if isinstance(sample, pd.DataFrame) else sample
+    node_indicator = model.decision_path(sample)
+    node_indices = node_indicator.indices[
+        node_indicator.indptr[0] : node_indicator.indptr[1]
+    ]
+
+    steps = []
+    for node_id in node_indices:
+        feature_index = tree.feature[node_id]
+        if feature_index == _tree.TREE_UNDEFINED:
+            continue
+
+        value = float(sample_values[0, feature_index])
+        threshold = float(tree.threshold[node_id])
+        passed = value <= threshold
+        operator = "<=" if passed else ">"
+        steps.append({
+            "numero": len(steps) + 1,
+            "variable": str(feature_names[feature_index]),
+            "valor": value,
+            "umbral": threshold,
+            "condicion": f"{feature_names[feature_index]} <= {threshold:.3f}",
+            "condicion_satisfecha": passed,
+            "rama": "izquierda" if passed else "derecha",
+        })
+
+    leaf_id = int(node_indices[-1])
+    class_index = int(np.argmax(tree.value[leaf_id][0]))
+    leaf_class = int(model.classes_[class_index])
+    return {
+        "pasos": steps,
+        "hoja": {
+            "nodo": leaf_id,
+            "clasificacion": "ANOMALO" if leaf_class == 1 else "NORMAL",
+            "muestras_entrenamiento": int(tree.n_node_samples[leaf_id]),
+        },
+    }

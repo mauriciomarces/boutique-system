@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
+import AdministrationLayout from "../../administration/components/AdministrationLayout";
 import LogoutButton from "../../auth/components/LogoutButton";
 import { getProducts } from "../../products/services/productsApi";
 import type { Product, ProductVariant } from "../../products/types/products.types";
 import usePermissions from "../../auth/hooks/usePermissions";
+import { matchesLocalDateRange } from "../../utils/dateFilters";
 
 type Provider = {
   id: string;
@@ -95,6 +99,13 @@ export default function PurchasesPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyProvider, setHistoryProvider] = useState("");
+  const [historyStatus, setHistoryStatus] = useState("");
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
+  const [minimumTotal, setMinimumTotal] = useState("");
+  const [maximumTotal, setMaximumTotal] = useState("");
   const [providerId, setProviderId] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
@@ -157,6 +168,41 @@ export default function PurchasesPage() {
       ),
     [lines],
   );
+  const visiblePurchases = useMemo(() => {
+    const term = historySearch.trim().toLocaleLowerCase("es");
+    const min = minimumTotal === "" ? undefined : Number(minimumTotal);
+    const max = maximumTotal === "" ? undefined : Number(maximumTotal);
+
+    return purchases.filter((purchase) => {
+      const providerName = purchase.proveedores?.nombre ?? "";
+      const searchable = [
+        purchase.id,
+        purchase.estado,
+        purchase.fecha_compra,
+        providerName,
+      ].join(" ").toLocaleLowerCase("es");
+      const total = Number(purchase.total);
+
+      return (
+        (!term || searchable.includes(term)) &&
+        (!historyProvider || providerName === historyProvider) &&
+        (!historyStatus || purchase.estado === historyStatus) &&
+        matchesLocalDateRange(purchase.fecha_compra?.slice(0, 10), historyFrom, historyTo) &&
+        (min === undefined || total >= min) &&
+        (max === undefined || total <= max)
+      );
+    });
+  }, [
+    historySearch,
+    historyProvider,
+    historyStatus,
+    historyFrom,
+    historyTo,
+    minimumTotal,
+    maximumTotal,
+    purchases,
+  ]);
+  const purchasePagination = usePagination(visiblePurchases);
 
   function updateLine(index: number, field: keyof Line, value: string) {
     setLines((current) =>
@@ -260,9 +306,10 @@ export default function PurchasesPage() {
   }
 
   return (
-    <div className="min-h-screen theme-bg theme-text md:flex">
-      <AdministrationSidebar sidebarOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
+    <AdministrationLayout
+      sidebarOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    >
       <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
         <div className="mx-auto max-w-7xl space-y-6">
           <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -524,10 +571,113 @@ export default function PurchasesPage() {
               Compras registradas, ordenadas de la más reciente a la más antigua.
             </p>
 
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <input
+                type="search"
+                value={historySearch}
+                onChange={(event) => {
+                  setHistorySearch(event.target.value);
+                  purchasePagination.setPage(1);
+                }}
+                placeholder="Buscar por número, proveedor o estado"
+                aria-label="Buscar compras"
+                className={fieldClass}
+              />
+              <select
+                value={historyProvider}
+                onChange={(event) => {
+                  setHistoryProvider(event.target.value);
+                  purchasePagination.setPage(1);
+                }}
+                aria-label="Filtrar compras por proveedor"
+                className={fieldClass}
+              >
+                <option value="">Todos los proveedores</option>
+                {[...new Set(purchases.map((purchase) => purchase.proveedores?.nombre).filter(Boolean))]
+                  .sort()
+                  .map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+              </select>
+              <select
+                value={historyStatus}
+                onChange={(event) => {
+                  setHistoryStatus(event.target.value);
+                  purchasePagination.setPage(1);
+                }}
+                aria-label="Filtrar compras por estado"
+                className={fieldClass}
+              >
+                <option value="">Todos los estados</option>
+                {[...new Set(purchases.map((purchase) => purchase.estado))]
+                  .sort()
+                  .map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+              </select>
+              <label className="text-sm theme-text">
+                Desde
+                <input
+                  type="date"
+                  value={historyFrom}
+                  onChange={(event) => {
+                    setHistoryFrom(event.target.value);
+                    purchasePagination.setPage(1);
+                  }}
+                  className={`${fieldClass} mt-1`}
+                />
+              </label>
+              <label className="text-sm theme-text">
+                Hasta
+                <input
+                  type="date"
+                  value={historyTo}
+                  onChange={(event) => {
+                    setHistoryTo(event.target.value);
+                    purchasePagination.setPage(1);
+                  }}
+                  className={`${fieldClass} mt-1`}
+                />
+              </label>
+              <label className="text-sm theme-text">
+                Total mínimo (Bs)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={minimumTotal}
+                  onChange={(event) => {
+                    setMinimumTotal(event.target.value);
+                    purchasePagination.setPage(1);
+                  }}
+                  className={`${fieldClass} mt-1`}
+                />
+              </label>
+              <label className="text-sm theme-text">
+                Total máximo (Bs)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={maximumTotal}
+                  onChange={(event) => {
+                    setMaximumTotal(event.target.value);
+                    purchasePagination.setPage(1);
+                  }}
+                  className={`${fieldClass} mt-1`}
+                />
+              </label>
+              <p className="self-end text-sm theme-text-muted">
+                {visiblePurchases.length} de {purchases.length} compras
+              </p>
+            </div>
+
             {loading ? (
               <p className="py-8 text-center theme-text-muted">Cargando historial...</p>
             ) : purchases.length === 0 ? (
               <p className="py-8 text-center theme-text-muted">Todavía no hay compras registradas.</p>
+            ) : visiblePurchases.length === 0 ? (
+              <p className="py-8 text-center theme-text-muted">No hay compras que coincidan con los filtros.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[650px] text-left text-sm">
@@ -542,7 +692,7 @@ export default function PurchasesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {purchases.map((purchase) => (
+                    {purchasePagination.pageItems.map((purchase) => (
                       <tr key={purchase.id} className="border-b theme-border last:border-0">
                         <td className="px-3 py-3 font-medium">#{purchase.id}</td>
                         <td className="px-3 py-3">
@@ -564,9 +714,19 @@ export default function PurchasesPage() {
                 </table>
               </div>
             )}
+            {purchases.length > 0 && (
+              <PaginationControls
+                page={purchasePagination.page}
+                pageCount={purchasePagination.pageCount}
+                pageSize={purchasePagination.pageSize}
+                total={purchasePagination.total}
+                onPageChange={purchasePagination.setPage}
+                onPageSizeChange={purchasePagination.setPageSize}
+              />
+            )}
           </section>
         </div>
       </main>
-    </div>
+    </AdministrationLayout>
   );
 }

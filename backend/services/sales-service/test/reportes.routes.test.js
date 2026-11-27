@@ -52,7 +52,11 @@ const sales = [
     fecha_venta: new Date(2026, 9, 3, 10),
     estado: 'CONFIRMADA',
     total: '120.50',
-    clientes: { nombre: 'Ana', apellido: 'Lopez' },
+    clientes: {
+      nombre: 'Ana',
+      apellido_paterno: 'Lopez',
+      apellido_materno: 'Garcia',
+    },
     pagos: [{ monto: '50.25', estado: 'PAGADO' }],
   },
   {
@@ -89,7 +93,7 @@ test('el reporte diario separa ventas anuladas, ingresos y pagos recibidos', asy
   assert.equal(response.payload.ventasCanceladas, 1);
   assert.equal(response.payload.ingresosPorVentas, 120.5);
   assert.equal(response.payload.pagosRecibidos, 20);
-  assert.equal(response.payload.operaciones[0].cliente, 'Ana Lopez');
+  assert.equal(response.payload.operaciones[0].cliente, 'Ana Lopez Garcia');
   assert.equal(
     calls.find(({ model }) => model === 'ventas').args.where.fecha_venta.gte.getDate(),
     3,
@@ -122,6 +126,25 @@ test('el reporte mensual agrega ventas por día e ingresos sin incluir anulacion
   assert.equal(response.payload.resumenPorDia[0].cantidadVentas, 0);
 });
 
+test('el reporte mensual agrupa por el día calendario de Bolivia', async () => {
+  const { handlers } = createRouteHarness({
+    sales: [{
+      ...sales[0],
+      fecha_venta: new Date('2026-10-03T03:59:59.000Z'),
+    }],
+    payments: [],
+  });
+
+  const response = await invoke(handlers.get('/reportes/mensual'), {
+    mes: '10',
+    anio: '2026',
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.payload.resumenPorDia[1].fecha, '2026-10-02');
+  assert.equal(response.payload.resumenPorDia[1].cantidadVentas, 1);
+});
+
 test('los filtros de fechas rechazan rangos inválidos y fechas imposibles', () => {
   assert.throws(
     () => parseDateRange('2026-10-04', '2026-10-03'),
@@ -131,6 +154,12 @@ test('los filtros de fechas rechazan rangos inválidos y fechas imposibles', () 
     () => parseDateRange('2026-02-30', '2026-03-01'),
     /no es una fecha válida/,
   );
+});
+
+test('los filtros de fecha usan días calendario de Bolivia sobre fechas UTC', () => {
+  const range = parseDateRange('2026-10-03', '2026-10-03');
+  assert.equal(range.start.toISOString(), '2026-10-03T04:00:00.000Z');
+  assert.equal(range.end.toISOString(), '2026-10-04T04:00:00.000Z');
 });
 
 test('el reporte de ingresos expone ventas y pagos como métricas distintas', async () => {
@@ -177,6 +206,38 @@ test('el reporte de ventas aplica rango de fechas, estado y cliente', async () =
   assert.equal(query.fecha_venta.lt.getMonth(), 10);
 });
 
+test('el reporte de ventas aplica filtros de importe, número y datos de pago', async () => {
+  const { handlers, calls } = createRouteHarness({
+    sales: [],
+    payments: [],
+  });
+  const response = await invoke(handlers.get('/reportes/ventas'), {
+    desde: '2026-10-01',
+    hasta: '2026-10-31',
+    venta_id: '19',
+    cliente: 'Ana  Lopez',
+    importe_min: '25.50',
+    importe_max: '250',
+    estado_pago: 'pagado',
+    metodo_pago: 'efectivo',
+  });
+
+  assert.equal(response.statusCode, 200);
+  const query = calls[0].args.where;
+  assert.equal(query.id, 19n);
+  assert.equal(query.clientes.is.AND.length, 2);
+  assert.deepEqual(query.clientes.is.AND[0].OR, [
+    { nombre: { contains: 'Ana' } },
+    { apellido_paterno: { contains: 'Ana' } },
+    { apellido_materno: { contains: 'Ana' } },
+  ]);
+  assert.deepEqual(query.total, { gte: 25.5, lte: 250 });
+  assert.deepEqual(query.pagos, {
+    some: { estado: 'PAGADO', metodo_pago: 'EFECTIVO' },
+  });
+  assert.equal(calls[0].args.include.pagos.select.metodo_pago, true);
+});
+
 test('los endpoints de reportes responden 400 ante filtros inválidos', async () => {
   const { handlers } = createRouteHarness({ sales: [], payments: [] });
   const response = await invoke(handlers.get('/reportes/ventas'), {
@@ -185,4 +246,23 @@ test('los endpoints de reportes responden 400 ante filtros inválidos', async ()
     estado: 'BORRADOR',
   });
   assert.equal(response.statusCode, 400);
+});
+
+test('el reporte de ventas rechaza límites de importe incoherentes o inválidos', async () => {
+  const { handlers } = createRouteHarness({ sales: [], payments: [] });
+  const reversed = await invoke(handlers.get('/reportes/ventas'), {
+    desde: '2026-10-01',
+    hasta: '2026-10-31',
+    importe_min: '300',
+    importe_max: '100',
+  });
+  const malformed = await invoke(handlers.get('/reportes/ventas'), {
+    desde: '2026-10-01',
+    hasta: '2026-10-31',
+    importe_min: '12.345',
+  });
+
+  assert.equal(reversed.statusCode, 400);
+  assert.match(reversed.payload.error, /mínimo no puede superar/);
+  assert.equal(malformed.statusCode, 400);
 });

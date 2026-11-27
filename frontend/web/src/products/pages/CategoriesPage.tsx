@@ -1,10 +1,14 @@
 ﻿import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import AdministrationSidebar from "../../administration/components/AdministrationSidebar";
+import PaginationControls, {
+  usePagination,
+} from "../../components/PaginationControls";
+import AdministrationLayout from "../../administration/components/AdministrationLayout";
 import LogoutButton from "../../auth/components/LogoutButton";
 import type {
   Category,
@@ -18,6 +22,7 @@ import {
   updateCategory,
 } from "../services/categoriesApi";
 import usePermissions from "../../auth/hooks/usePermissions";
+import { matchesLocalDateRange } from "../../utils/dateFilters";
 
 const EMPTY_FORM: CategoryForm = {
   nombre: "",
@@ -28,6 +33,9 @@ function CategoriesPage() {
   const { can } = usePermissions();
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"TODOS" | "ACTIVO" | "INACTIVO">("ACTIVO");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -162,12 +170,24 @@ function CategoriesPage() {
     event: FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
+    categoryPagination.setPage(1);
     await loadCategories(search);
   };    
+  const visibleCategories = useMemo(
+    () => categories.filter((category) =>
+      (statusFilter === "TODOS" || category.estado === statusFilter) &&
+      matchesLocalDateRange(category.creado_en, createdFrom, createdTo),
+    ),
+    [categories, statusFilter, createdFrom, createdTo],
+  );
+  const categoryPagination = usePagination(visibleCategories);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="theme-bg min-h-screen">
+    <AdministrationLayout
+      sidebarOpen={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    >
       <header className="relative border-b theme-border bg-[var(--nav-bg)]">
         <div className="mx-auto flex h-[76px] max-w-[1500px] items-center justify-between px-4 sm:px-6 lg:px-8">
   <div className="flex min-w-0 items-center gap-3">
@@ -212,9 +232,7 @@ function CategoriesPage() {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1500px] gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <AdministrationSidebar sidebarOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
+      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
         <main className="min-w-0 flex-1">
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
@@ -290,16 +308,77 @@ function CategoriesPage() {
             </button>
           </form>
 
+          <div className="mb-4 flex flex-wrap gap-2">
+            {([
+              ["ACTIVO", "Activas"],
+              ["INACTIVO", "Inactivas"],
+              ["TODOS", "Todas"],
+            ] as const).map(([value, label]) => {
+              const count = value === "TODOS"
+                ? categories.length
+                : categories.filter((category) => category.estado === value).length;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter(value);
+                    categoryPagination.setPage(1);
+                  }}
+                  aria-pressed={statusFilter === value}
+                  className={`rounded-xl border px-3 py-2 text-sm font-medium ${
+                    statusFilter === value
+                      ? "border-[var(--accent)] bg-[var(--bg-secondary)] theme-text"
+                      : "theme-border theme-text-soft"
+                  }`}
+                >
+                  {label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <label className="text-sm theme-text">
+              Registrada desde
+              <input
+                type="date"
+                value={createdFrom}
+                onChange={(event) => {
+                  setCreatedFrom(event.target.value);
+                  categoryPagination.setPage(1);
+                }}
+                className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2"
+              />
+            </label>
+            <label className="text-sm theme-text">
+              Registrada hasta
+              <input
+                type="date"
+                value={createdTo}
+                onChange={(event) => {
+                  setCreatedTo(event.target.value);
+                  categoryPagination.setPage(1);
+                }}
+                className="mt-1 w-full rounded-xl border theme-border bg-[var(--bg)] px-3 py-2"
+              />
+            </label>
+            <p className="self-end text-sm theme-text-muted">
+              {visibleCategories.length} de {categories.length} categorías
+            </p>
+          </div>
+
           <div className="overflow-hidden rounded-2xl border theme-border bg-[var(--card-bg)]">
             {loading ? (
               <div className="p-8 text-center theme-text-soft">
                 Cargando categorías...
               </div>
-            ) : categories.length === 0 ? (
+            ) : visibleCategories.length === 0 ? (
               <div className="p-8 text-center theme-text-soft">
-                No se encontraron categorías.
+                No hay categorías en esta vista.
               </div>
             ) : (
+              <>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="border-b theme-border">
@@ -323,7 +402,7 @@ function CategoriesPage() {
                   </thead>
 
                   <tbody>
-                    {categories.map((category) => (
+                    {categoryPagination.pageItems.map((category) => (
                       <tr
                         key={category.id}
                         className="border-b theme-border last:border-b-0"
@@ -374,6 +453,15 @@ function CategoriesPage() {
                   </tbody>
                 </table>
               </div>
+              <PaginationControls
+                page={categoryPagination.page}
+                pageCount={categoryPagination.pageCount}
+                pageSize={categoryPagination.pageSize}
+                total={categoryPagination.total}
+                onPageChange={categoryPagination.setPage}
+                onPageSizeChange={categoryPagination.setPageSize}
+              />
+              </>
             )}
           </div>
         </main>
@@ -467,7 +555,7 @@ function CategoriesPage() {
           </div>
         </div>
       )}
-    </div>
+    </AdministrationLayout>
   );
 }
 

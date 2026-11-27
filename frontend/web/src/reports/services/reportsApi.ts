@@ -8,6 +8,7 @@ export type ReportOperation = {
   importe: number;
   estado: string;
   pagosRecibidos: number;
+  metodosPago: string[];
 };
 
 export type ReportDay = {
@@ -41,6 +42,17 @@ export type SalesReport = {
 
 export type ReportType = SalesReport["tipo"] | "egresos";
 
+export type SalesReportFilters = {
+  status?: string;
+  clientId?: string;
+  clientName?: string;
+  saleId?: string;
+  minAmount?: string;
+  maxAmount?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+};
+
 async function getReport<T>(path: string): Promise<T> {
   const token = getAccessToken();
   if (!token) throw new Error("No hay sesión activa.");
@@ -73,12 +85,17 @@ export function getMonthlyReport(month: number, year: number) {
 export function getSalesReport(
   from: string,
   to: string,
-  status: string,
-  clientId: string,
+  filters: SalesReportFilters = {},
 ) {
   const query = new URLSearchParams({ desde: from, hasta: to });
-  if (status) query.set("estado", status);
-  if (clientId) query.set("cliente_id", clientId);
+  if (filters.status) query.set("estado", filters.status);
+  if (filters.clientId) query.set("cliente_id", filters.clientId);
+  if (filters.clientName) query.set("cliente", filters.clientName);
+  if (filters.saleId) query.set("venta_id", filters.saleId);
+  if (filters.minAmount) query.set("importe_min", filters.minAmount);
+  if (filters.maxAmount) query.set("importe_max", filters.maxAmount);
+  if (filters.paymentStatus) query.set("estado_pago", filters.paymentStatus);
+  if (filters.paymentMethod) query.set("metodo_pago", filters.paymentMethod);
   return getReport<SalesReport>(`/api/reportes/ventas?${query}`);
 }
 
